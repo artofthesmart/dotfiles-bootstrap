@@ -4,7 +4,7 @@ set -e
 # Setup Script Bootstrap
 # Download and run with:
 # ```bash
-# wget https://raw.githubusercontent.com/artofthesmart/shell-setup/main/bootstrap.sh -O bootstrap.sh
+# wget https://raw.githubusercontent.com/artofthesmart/dotfiles-bootstrap/main/bootstrap.sh -O bootstrap.sh
 # chmod +x bootstrap.sh
 # ./bootstrap.sh
 # ```
@@ -61,7 +61,7 @@ if [ ! -f "setup.py" ]; then
         cd "$(dirname "$0")"
     else
         echo "Downloading setup.py..."
-        curl -LsSf https://raw.githubusercontent.com/artofthesmart/shell-setup/main/setup.py -o setup.py
+        curl -LsSf https://raw.githubusercontent.com/artofthesmart/dotfiles-bootstrap/main/setup.py -o setup.py
     fi
 fi
 
