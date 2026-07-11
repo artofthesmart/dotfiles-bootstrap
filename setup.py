@@ -25,23 +25,24 @@ def run_cmd(command, desc=None, sudo=False, allow_fail=False):
         # a bare prefix only elevates the first sub-command, leaving the
         # rest to run unprivileged (e.g. causing dpkg lock permission errors).
         command = f"sudo bash -c {shlex.quote(command)}"
-        
+
+    # Output is streamed live (stdout/stderr/stdin all inherited from this
+    # process) rather than captured, so slow steps stay visible and any
+    # prompt a subcommand throws (e.g. a y/n confirmation) actually reaches
+    # the user instead of silently blocking forever behind a spinner.
     if desc:
-        with console.status(f"[bold cyan]{desc}...[/bold cyan]", spinner="dots"):
-            process = subprocess.run(command, shell=True, executable="/bin/bash", capture_output=True, text=True)
-            if process.returncode != 0 and not allow_fail:
-                console.print(f"[bold red]Error:[/bold red] {desc} failed!")
-                console.print(f"[red]{process.stderr}[/red]")
-                sys.exit(1)
-            elif process.returncode == 0:
-                console.print(f"[green]✓[/green] {desc} completed.")
-            return process.returncode == 0
-    else:
-        process = subprocess.run(command, shell=True, executable="/bin/bash", capture_output=True, text=True)
-        if process.returncode != 0 and not allow_fail:
-            console.print(f"[bold red]Command failed:[/bold red] {command}\n[red]{process.stderr}[/red]")
-            sys.exit(1)
-        return process.returncode == 0
+        console.print(f"[bold cyan]→ {desc}...[/bold cyan]")
+
+    process = subprocess.run(command, shell=True, executable="/bin/bash")
+    if process.returncode != 0 and not allow_fail:
+        if desc:
+            console.print(f"[bold red]Error:[/bold red] {desc} failed!")
+        else:
+            console.print(f"[bold red]Command failed:[/bold red] {command}")
+        sys.exit(1)
+    elif process.returncode == 0 and desc:
+        console.print(f"[green]✓[/green] {desc} completed.")
+    return process.returncode == 0
 
 def install_base():
     run_cmd("apt-get update -y && apt-get upgrade -y", "Updating APT packages", sudo=True)
