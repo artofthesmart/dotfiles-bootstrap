@@ -8,6 +8,7 @@
 
 import os
 import sys
+import shlex
 import subprocess
 import questionary
 from rich.console import Console
@@ -19,7 +20,11 @@ USER = os.environ.get("USER", "root")
 
 def run_cmd(command, desc=None, sudo=False, allow_fail=False):
     if sudo:
-        command = f"sudo {command}"
+        # Wrap the whole command in `sudo bash -c '...'` rather than just
+        # prefixing "sudo " — commands are often multi-line `&&` chains, and
+        # a bare prefix only elevates the first sub-command, leaving the
+        # rest to run unprivileged (e.g. causing dpkg lock permission errors).
+        command = f"sudo bash -c {shlex.quote(command)}"
         
     if desc:
         with console.status(f"[bold cyan]{desc}...[/bold cyan]", spinner="dots"):
