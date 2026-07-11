@@ -51,8 +51,19 @@ def install_base():
 
 def install_zsh():
     run_cmd("apt-get install -y zsh", "Installing Zsh", sudo=True)
-    
-    if not os.path.isdir(os.path.join(HOME, ".oh-my-zsh")):
+
+    omz_dir = os.path.join(HOME, ".oh-my-zsh")
+    zshrc = os.path.join(HOME, ".zshrc")
+    if os.path.isdir(omz_dir) and not os.path.isfile(zshrc):
+        # oh-my-zsh clones its repo before writing ~/.zshrc, so an install
+        # interrupted partway (e.g. killed while stuck on a hidden prompt)
+        # leaves this directory behind without ever finishing setup. Its
+        # installer also refuses to run again while the directory exists,
+        # so wipe the partial clone rather than falsely reporting "done".
+        console.print("[yellow]![/yellow] Found an incomplete Oh My Zsh install, removing it before reinstalling.")
+        run_cmd(f"rm -rf {omz_dir}", "Removing incomplete Oh My Zsh install")
+
+    if not os.path.isdir(omz_dir):
         run_cmd("CHSH=no RUNZSH=no sh -c \"$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)\"", "Installing Oh My Zsh")
     else:
         console.print("[green]✓[/green] Oh My Zsh already installed.")
