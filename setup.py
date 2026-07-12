@@ -9,6 +9,7 @@
 import os
 import sys
 import shlex
+import platform
 import subprocess
 import questionary
 from rich.console import Console
@@ -111,12 +112,21 @@ def install_neovim():
     if run_cmd("command -v nvim", allow_fail=True):
         console.print("[green]✓[/green] Neovim already installed.")
     else:
-        cmds = """
-        curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz && \
-        rm -rf /opt/nvim-linux-x86_64 && \
-        tar -C /opt -xzf nvim-linux-x86_64.tar.gz && \
-        rm nvim-linux-x86_64.tar.gz && \
-        ln -sf /opt/nvim-linux-x86_64/bin/nvim /usr/local/bin/nvim
+        # Neovim only ships prebuilt tarballs for x86_64 and arm64 (Pi 3/4/
+        # Zero 2 W and other 64-bit ARM boards) — grabbing the wrong one
+        # downloads a binary the kernel can't execute (exec format error).
+        arch_map = {"x86_64": "x86_64", "aarch64": "arm64", "arm64": "arm64"}
+        nvim_arch = arch_map.get(platform.machine())
+        if not nvim_arch:
+            console.print(f"[bold red]Error:[/bold red] No prebuilt Neovim binary for architecture '{platform.machine()}'.")
+            sys.exit(1)
+        pkg = f"nvim-linux-{nvim_arch}"
+        cmds = f"""
+        curl -LO https://github.com/neovim/neovim/releases/latest/download/{pkg}.tar.gz && \
+        rm -rf /opt/{pkg} && \
+        tar -C /opt -xzf {pkg}.tar.gz && \
+        rm {pkg}.tar.gz && \
+        ln -sf /opt/{pkg}/bin/nvim /usr/local/bin/nvim
         """
         run_cmd(cmds, "Installing Neovim", sudo=True)
 
@@ -228,6 +238,12 @@ def install_zsh_plugins():
         run_cmd(f"sed -i 's/plugins=(git)/plugins=(git zsh-autosuggestions zsh-syntax-highlighting)/g' {zshrc}", "Configuring Zsh plugins")
 
 def install_nvidia_cuda():
+    if platform.machine() != "x86_64":
+        # The graphics-drivers PPA and ubuntu-drivers tooling only target
+        # x86_64 Ubuntu; NVIDIA's ARM (Jetson) stack is a different install
+        # path entirely, so there's no equivalent package to fall back to.
+        console.print(f"[yellow]![/yellow] Skipping NVIDIA/CUDA: not supported on architecture '{platform.machine()}'.")
+        return
     run_cmd("add-apt-repository ppa:graphics-drivers/ppa -y && apt-get update -y", "Adding NVIDIA PPA", sudo=True)
     run_cmd("ubuntu-drivers install", "Installing recommended NVIDIA drivers", sudo=True)
     run_cmd("apt-get install -y nvidia-cuda-toolkit", "Installing CUDA Toolkit", sudo=True)
@@ -235,6 +251,11 @@ def install_nvidia_cuda():
     run_cmd("echo 'export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH' >> ~/.zshrc", "Adding CUDA lib to LD_LIBRARY_PATH")
 
 def install_steam():
+    if platform.machine() != "x86_64":
+        # Valve doesn't ship a Linux Steam client for ARM at all, so there's
+        # no alternate package to install here — just fail fast and clearly.
+        console.print(f"[yellow]![/yellow] Skipping Steam: no Linux build exists for architecture '{platform.machine()}'.")
+        return
     cmds = """
     dpkg --add-architecture i386 && \
     apt-get update -y && \
