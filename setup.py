@@ -285,8 +285,8 @@ def install_gnome_tools():
     run_cmd("apt-get install -y gnome-tweaks gnome-shell-extension-manager", "Installing GNOME Customization Tools", sudo=True)
 
 def install_extra_utilities():
-    run_cmd("apt-get install -y ncdu vlc", "Installing ncdu & vlc", sudo=True)
-    run_cmd("ufw enable", "Enabling UFW Firewall", sudo=True)
+    run_cmd("apt-get install -y ncdu vlc ufw", "Installing ncdu, vlc & ufw", sudo=True)
+    run_cmd("ufw --force enable", "Enabling UFW Firewall", sudo=True)
 
 def main():
     console.print(Panel.fit("[bold blue]Antigravity Shell Setup[/bold blue]", subtitle="Modern Hybrid Installer"))
