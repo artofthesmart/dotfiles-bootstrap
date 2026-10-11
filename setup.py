@@ -271,15 +271,12 @@ EOF
     """
     run_cmd(cmds, "Installing Steam & Mesa drivers", sudo=True)
 
-def install_antigravity():
-    cmds = """
-    mkdir -p /etc/apt/keyrings && \
-    curl -fsSL https://us-central1-apt.pkg.dev/doc/repo-signing-key.gpg | gpg --dearmor --yes -o /etc/apt/keyrings/antigravity-repo-key.gpg && \
-    echo "deb [signed-by=/etc/apt/keyrings/antigravity-repo-key.gpg] https://us-central1-apt.pkg.dev/projects/antigravity-auto-updater-dev/ antigravity-debian main" | tee /etc/apt/sources.list.d/antigravity.list > /dev/null && \
-    apt-get update -y && \
-    apt-get install -y antigravity
-    """
-    run_cmd(cmds, "Installing Antigravity Auto Updater", sudo=True)
+def install_copilot_cli():
+    if run_cmd("command -v copilot", allow_fail=True):
+        console.print("[green]✓[/green] GitHub Copilot CLI already installed.")
+    else:
+        run_cmd("set -o pipefail; curl -fsSL https://gh.io/copilot-install | bash", "Installing GitHub Copilot CLI")
+        run_cmd("copilot --version", "Verifying GitHub Copilot CLI")
 
 def install_gnome_tools():
     run_cmd("apt-get install -y gnome-tweaks gnome-shell-extension-manager", "Installing GNOME Customization Tools", sudo=True)
@@ -289,7 +286,7 @@ def install_extra_utilities():
     run_cmd("ufw --force enable", "Enabling UFW Firewall", sudo=True)
 
 def main():
-    console.print(Panel.fit("[bold blue]Antigravity Shell Setup[/bold blue]", subtitle="Modern Hybrid Installer"))
+    console.print(Panel.fit("[bold blue]Shell Setup[/bold blue]", subtitle="Modern Hybrid Installer"))
     
     choices = [
         questionary.Choice("Base System Utilities & Updates", checked=True),
@@ -308,7 +305,7 @@ def main():
         questionary.Choice("Zsh Plugins (Autosuggestions & Syntax Highlighting)", checked=False),
         questionary.Choice("NVIDIA Drivers & CUDA Toolkit", checked=False),
         questionary.Choice("Steam & Gaming Setup", checked=False),
-        questionary.Choice("Antigravity Package", checked=False),
+        questionary.Choice("GitHub Copilot CLI", checked=False),
         questionary.Choice("GNOME Customization Tools", checked=False),
         questionary.Choice("Extra Utilities (ncdu, vlc, UFW firewall)", checked=False),
         questionary.Choice("Advanced CLI: bat (Syntax Cat)", checked=False),
@@ -360,8 +357,8 @@ def main():
         install_nvidia_cuda()
     if "Steam & Gaming Setup" in selected:
         install_steam()
-    if "Antigravity Package" in selected:
-        install_antigravity()
+    if "GitHub Copilot CLI" in selected:
+        install_copilot_cli()
     if "GNOME Customization Tools" in selected:
         install_gnome_tools()
     if "Extra Utilities (ncdu, vlc, UFW firewall)" in selected:

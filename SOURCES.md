@@ -1,0 +1,112 @@
+# Installer sources and update guide
+
+Last reviewed: 2026-10-11
+
+This inventory covers `bootstrap.sh`, `setup.py`, and `setup_termux.sh`.
+Prefer each project's official documentation or release page when changing
+installer URLs, package names, versions, or platform assumptions.
+
+`bootstrap.sh` installs Ubuntu/APT prerequisites and launches `setup.py`, which
+provides the component selector. It does not install every optional component
+itself; for example, Copilot CLI is installed only when selected in `setup.py`.
+When run from a checkout containing `setup.py`, the bootstrap uses that local
+copy; when run standalone, it downloads `setup.py` from the repository's
+`main` branch.
+
+## Platform assessment
+
+`bootstrap.sh` and `setup.py` are Ubuntu/Linux installers, not cross-platform
+installers. The bootstrap immediately uses `apt-get`; the Python installer also
+uses APT repositories and packages, `dpkg`, `/etc/apt`, Linux Neovim tarballs
+installed under `/opt`, and Linux-only service/network tools. macOS has none of
+these interfaces by default, and the Linux `sed -i` syntax is not portable to
+macOS. Some individual projects below support macOS, but that does not make
+these scripts equally effective there; a macOS path would need a separate
+Homebrew-based implementation and platform-specific handling. See
+[Homebrew's macOS installation requirements](https://docs.brew.sh/Installation)
+before designing that path.
+
+On a headless Ubuntu host, the default components can work if the host has
+working `sudo` access and the required packages/network access. For unattended
+bootstrap, set both `BOOTSTRAP_AUTO=1` and `SETUP_NONINTERACTIVE=1`; ensure
+`sudo` will not require an interactive password (or run in an environment
+where it is already authorized). Optional Docker installation still asks an
+interactive confirmation, so do not select it in a headless run without
+changing that behavior. The default set also runs `apt-get upgrade -y`, which
+may update the whole host. GUI-oriented options (GNOME tools, codecs, Steam,
+fonts) are generally not useful on a headless server. GitHub Copilot CLI is
+usable in a terminal on a headless host, but authentication must be completed
+separately.
+
+## `bootstrap.sh` and Python installer
+
+| Component / current installer behavior | Maintainer source and update reference |
+|---|---|
+| Ubuntu base packages: `curl`, `python3`, `python3-pip`, `python3-venv`, `git`, `zsh`; `setup.py` additionally installs `vim`, `gpg`, `make`, `man-db`, `gcc`, `unzip`, `wget`, `ripgrep`, `fd-find`, and `fontconfig` | [Ubuntu package search](https://packages.ubuntu.com/); packages and versions come from the host's configured Ubuntu repositories |
+| Python UI dependencies: `rich`, `questionary` (declared in the PEP 723 script metadata and supplied to `uv run`) | [Rich](https://github.com/Textualize/rich) · [Questionary](https://github.com/tmbo/questionary) · [uv script dependencies](https://docs.astral.sh/uv/guides/scripts/) |
+| uv installer: `https://astral.sh/uv/install.sh` | [uv installation](https://docs.astral.sh/uv/getting-started/installation/) |
+| Zsh, Oh My Zsh, and Powerlevel10k | [Zsh](https://www.zsh.org/) · [Oh My Zsh install/update](https://github.com/ohmyzsh/ohmyzsh) · [Powerlevel10k](https://github.com/romkatv/powerlevel10k) |
+| Build tools and libraries: `build-essential`, SSL/FFI, ncurses, zlib, bz2, readline, SQLite, LLVM, xz, Tcl/Tk, XML, and lzma development packages | [Ubuntu package search](https://packages.ubuntu.com/); build-essential and library package names are distribution-specific |
+| GitHub CLI: signed GitHub APT repository and `gh` package | [Official Linux installation and upgrade instructions](https://github.com/cli/cli/blob/trunk/docs/install_linux.md) |
+| Neovim: latest Linux x86_64/arm64 release tarball installed in `/opt` | [Neovim install instructions and supported archives](https://neovim.io/doc/install/) · [Neovim releases](https://github.com/neovim/neovim/releases) |
+| LazyVim: clones the starter configuration and removes its `.git` directory | [LazyVim starter](https://github.com/LazyVim/starter) · [LazyVim documentation](https://www.lazyvim.org/) |
+| Node.js (optional): removes the existing `~/.nvm` directory, installs nvm from the **v0.40.4** install script, then hard-codes `nvm install 25` | [nvm repository and releases](https://github.com/nvm-sh/nvm) · [Node.js release schedule](https://nodejs.org/en/about/previous-releases) |
+| Gemini CLI (optional): global npm package `@google/gemini-cli` | [Gemini CLI repository](https://github.com/google-gemini/gemini-cli) · [Google quick guide](https://codelabs.developers.google.com/codelabs/quick-guide-to-gemini-cli) |
+| Tailscale (optional): official Linux install script; exit-node mode also writes Linux sysctl/network-dispatcher configuration | [Linux installation](https://tailscale.com/docs/install/linux) · [Exit nodes](https://tailscale.com/docs/features/exit-nodes) |
+| Nerd Fonts (optional): downloads the latest RobotoMono archive and runs `fc-cache` | [Nerd Fonts releases and downloads](https://github.com/ryanoasis/nerd-fonts/releases) |
+| Docker Engine and Compose (optional): currently Ubuntu `docker.io` and `docker-compose` packages, then enables `docker` with `systemctl` | [Ubuntu Docker Engine instructions](https://docs.docker.com/engine/install/ubuntu/) · [Docker Linux post-installation](https://docs.docker.com/engine/install/linux-postinstall/) |
+| Zsh plugins (optional): clones autosuggestions and syntax-highlighting repositories | [zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggestions) · [zsh-syntax-highlighting](https://github.com/zsh-users/zsh-syntax-highlighting) |
+| NVIDIA drivers/CUDA (optional): Ubuntu graphics-drivers PPA, `ubuntu-drivers`, and `nvidia-cuda-toolkit` | [Ubuntu NVIDIA driver guidance](https://ubuntu.com/server/docs/nvidia-drivers-installation/) · [NVIDIA CUDA Linux installation guide](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/) |
+| Steam (optional): Steam's Debian APT repository plus 32-bit Mesa packages; x86_64 only | [Steam for Linux](https://store.steampowered.com/about/) · [Steam Debian repository](https://repo.steampowered.com/steam/) |
+| GitHub Copilot CLI (optional, installed by `setup.py`): installs the latest release with GitHub's Linux/macOS install script (`https://gh.io/copilot-install`); run as the user, so the installer defaults to `$HOME/.local` | [Official installation and update instructions](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli) · [Copilot CLI repository](https://github.com/github/copilot-cli) |
+| GNOME tools (optional): `gnome-tweaks` and `gnome-shell-extension-manager` | [GNOME Tweaks](https://gitlab.gnome.org/GNOME/gnome-tweaks) · [Extension Manager](https://github.com/mjakeman/extension-manager) |
+| Extra utilities (optional): `ncdu`, `vlc`, `ufw`; enables UFW | [Ubuntu package search](https://packages.ubuntu.com/) · [UFW](https://launchpad.net/ufw) |
+| `bat` (optional): Ubuntu package and a `batcat` alias | [bat project](https://github.com/sharkdp/bat) |
+| `fzf` (optional): shallow clone and runs the project's install script | [fzf project and install/update instructions](https://github.com/junegunn/fzf) |
+| `htop` and `btop` (optional) | [htop](https://github.com/htop-dev/htop) · [btop](https://github.com/aristocratos/btop) |
+| `fastfetch` (optional) | [fastfetch project](https://github.com/fastfetch-cli/fastfetch) |
+
+### Version/update notes
+
+- Most APT packages track the configured Ubuntu release rather than upstream
+  latest. Check package availability and release compatibility before changing
+  package names or adding third-party repositories.
+- Neovim, Nerd Fonts, fzf, and several Git clones use moving `latest` or
+  default-branch targets. For reproducible setups, consider pinning releases or
+  commits and documenting the intended upgrade cadence.
+- The Node component installs Node.js 25, which reached end of life on
+  2026-03-31. Review the official Node.js release schedule before retaining or
+  changing this pin; select a maintained release appropriate to the use case.
+- Copilot CLI's official install script supports macOS and Linux and can install
+  without Node.js. The `bootstrap.sh`/`setup.py` combination remains
+  Ubuntu/APT-specific; the Copilot CLI component alone does not make the
+  bootstrap macOS-compatible. On first launch, run `copilot` and use `/login`
+  (or `copilot login`); an active Copilot plan is required, and organization
+  policy can disable CLI access. Headless environments use device-code
+  authentication; if no Linux keyring is available, credentials may be stored
+  in plaintext in `~/.copilot/config.json`.
+- Docker's documentation distinguishes Docker Engine's official APT repository
+  from Ubuntu's `docker.io` / `docker-compose` packages. Reassess the package
+  source and Compose v1/v2 behavior when updating this component.
+
+## `setup_termux.sh`
+
+This is a separate Android/Termux installer; it uses Termux's `pkg` package
+manager and should not be treated as either the Ubuntu or macOS path.
+
+| Component / current installer behavior | Maintainer source and update reference |
+|---|---|
+| Termux packages: `man`, `neovim`, `wget`, `python`, `zsh`, `git`, `gitui`, `mc` | [Termux package management](https://wiki.termux.com/wiki/Package_Management) · [Termux packages](https://github.com/termux/termux-packages) |
+| Oh My Zsh and Powerlevel10k | [Oh My Zsh](https://github.com/ohmyzsh/ohmyzsh) · [Powerlevel10k](https://github.com/romkatv/powerlevel10k) |
+| Roboto Mono Nerd Font, downloaded from the Nerd Fonts repository's `master` branch | [Nerd Fonts](https://github.com/ryanoasis/nerd-fonts) |
+| LazyVim starter for Neovim | [LazyVim starter](https://github.com/LazyVim/starter) |
+| Termux font/settings reload command | [Termux application](https://github.com/termux/termux-app) |
+
+## Maintenance checklist
+
+When updating an installer, verify the upstream installation page, supported
+OS/architecture matrix, signing-key/repository instructions, and upgrade path.
+Prefer signed package repositories or versioned releases over unpinned remote
+scripts where practical. After changing an installer source, test the selected
+component on the target OS; test unattended mode separately if the script is
+used on a headless host.
