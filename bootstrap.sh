@@ -22,6 +22,14 @@ fi
 
 echo "--- Bootstrapping shell-setup ---"
 
+# The bootstrap and setup.py use Ubuntu/APT packages and Linux-specific
+# commands. Copilot CLI itself supports macOS, but this bootstrap does not.
+if [ "$(uname -s)" != "Linux" ] || ! command -v apt-get >/dev/null 2>&1; then
+    echo "ERROR: This bootstrap requires an Ubuntu/APT-based Linux host."
+    echo "GitHub Copilot CLI supports macOS, but the rest of this setup does not."
+    exit 1
+fi
+
 # Require sudo privileges upfront
 if [ "$EUID" -ne 0 ]; then
     if ! command -v sudo >/dev/null 2>&1; then
@@ -65,6 +73,7 @@ if [ ! -f "setup.py" ]; then
     fi
 fi
 
-# Re-execute in zsh and run the Python script
+# Re-execute in zsh and run the Python component selector. Optional tools,
+# including GitHub Copilot CLI, are installed by setup.py when selected.
 echo "Launching modern hybrid setup..."
 exec zsh -c "export PATH=\"\$HOME/.local/bin:\$PATH\"; uv run --with rich --with questionary setup.py"
