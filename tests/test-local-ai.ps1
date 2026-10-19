@@ -39,6 +39,11 @@ $script:LocalModel = 'fixture-model'
 $script:Answers = [Collections.Generic.Queue[string]]::new()
 $script:Calls = [Collections.Generic.List[object]]::new()
 $script:Mode = 'ok'
+$script:PromptFolder = Join-Path $script:Fixture 'Documents'
+function Get-PromptPath {
+    [void][IO.Directory]::CreateDirectory($script:PromptFolder)
+    return Join-Path $script:PromptFolder 'Local-AI-Gemini-Prompt.txt'
+}
 
 function Read-Choice([string]$Message) {
     if ($script:Answers.Count -eq 0) { throw "Fixture ran out of answers: $Message" }
@@ -100,7 +105,8 @@ try {
     Test-Case 'Hardware prompt is allowlisted and unknown VRAM stays unknown' {
         Set-Answers @('', 'n', '')
         Write-HardwarePrompt
-        $text = [IO.File]::ReadAllText((Join-Path $script:State 'gemini-prompt.txt'))
+        $text = [IO.File]::ReadAllText((Get-PromptPath))
+        Assert-True ((Get-PromptPath) -match 'Documents[/\\]Local-AI-Gemini-Prompt.txt$') 'Prompt is not in Documents'
         Assert-True ($text -match 'GPU memory: Unknown') 'Unknown VRAM not preserved'
         Assert-True ($text -notmatch 'DO-NOT-SHARE|AdapterRAM: 1') 'Hardware prompt leaked an excluded field'
         Assert-True ($text -match 'TOOL CALLING') 'No tool capability requirement'

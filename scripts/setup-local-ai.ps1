@@ -185,6 +185,12 @@ function Get-ModelVolume {
     $drive = [IO.DriveInfo]::new($root)
     return $drive
 }
+function Get-PromptPath {
+    $documents = [Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments)
+    if (-not $documents) { $documents = Join-Path $HOME 'Documents' }
+    [void][IO.Directory]::CreateDirectory($documents)
+    return Join-Path $documents 'Local-AI-Gemini-Prompt.txt'
+}
 function Write-HardwarePrompt {
     $osInfo = Get-CimInstance Win32_OperatingSystem
     $processors = @(Get-CimInstance Win32_Processor | Select-Object -ExpandProperty Name)
@@ -234,7 +240,7 @@ GGUF file and source page on https://huggingface.co, including architecture and
 chat-template/tool support caveats. Do not suggest executing repository code.
 State uncertainties and ask about missing hardware details instead of guessing.
 "@
-    $path = Join-Path $script:State 'gemini-prompt.txt'
+    $path = Get-PromptPath
     [IO.File]::WriteAllText($path, $promptText)
     Write-Host "`nReview this hardware-only prompt before sharing it with Gemini:`n$promptText"
     Write-Host "`nSaved to $path"
@@ -245,10 +251,15 @@ function Test-ModelName([string]$Name) {
     return $Name -cmatch '^[a-zA-Z0-9][a-zA-Z0-9._-]*(:[a-zA-Z0-9][a-zA-Z0-9._-]*)?$' -and $Name -notmatch 'cloud'
 }
 function Select-LocalModel {
+    Write-Host "`nChoose a small, tool-capable model from https://ollama.com/library to run on this computer."
+    Write-Host 'Use the Gemini recommendation to check that it fits your memory and supports Agent tools.'
+    Write-Host 'Copy its exact model name and size tag from the model page (the part after "ollama run").'
+    Write-Host 'You do not need to download it in the Ollama app. Enter the name here; this wizard downloads it after you confirm.'
+    Write-Host 'Choose local model weights, not a cloud model. The download may be several GB.'
     $source = Read-Choice 'Model source: 1 = Ollama Library (recommended), 2 = import a downloaded Hugging Face GGUF'
     $gguf = $null
     switch ($source) {
-        '1' { $script:Model = Read-Choice 'Exact local Ollama Library tag from Gemini (not a URL or command)' }
+        '1' { $script:Model = Read-Choice 'Paste the exact model name, including its size tag if shown (name only, without "ollama run")' }
         '2' {
             Write-Host 'Download a compatible single-file GGUF yourself. Check license, architecture, quantization and tool/chat-template support.'
             $gguf = Read-Choice 'Full path to the downloaded single-file .gguf'
@@ -388,8 +399,6 @@ function Start-LocalAISetup {
     Write-Host "`nLOCAL AI SETUP" -ForegroundColor Cyan
     Write-Host 'Four steps: install apps, choose a model, check it, connect VS Code.'
     Write-Host 'We ask before installing or downloading models. Enter q at a prompt to stop.'
-    $script:State = Join-Path $env:LOCALAPPDATA 'LocalAISetup'
-    [void][IO.Directory]::CreateDirectory($script:State)
     $script:Work = Join-Path ([IO.Path]::GetTempPath()) ('local-ai-setup-' + [guid]::NewGuid().ToString('N'))
     [void][IO.Directory]::CreateDirectory($script:Work)
     $previousHost = $env:OLLAMA_HOST
@@ -398,7 +407,9 @@ function Start-LocalAISetup {
         Write-SetupStep 1 'Install or reuse VS Code and Ollama'
         Install-Applications
         Wait-Ollama
-        Write-SetupStep 2 'Find a model that fits your computer'
+        Write-SetupStep 2 'Choose and download a local Ollama model'
+        Write-Host 'First, review your hardware and ask Gemini which small, tool-capable model fits.'
+        Write-Host 'Then choose it from the Ollama catalog. This wizard will download it for you.'
         $script:ModelStorage = if ($env:OLLAMA_MODELS) { $env:OLLAMA_MODELS } else { Join-Path $HOME '.ollama\models' }
         Write-Host "Model storage default: $script:ModelStorage"
         $storage = Read-Choice 'If your running Ollama server uses different model storage, enter its absolute directory (Enter to keep default)'

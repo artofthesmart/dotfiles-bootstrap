@@ -139,9 +139,13 @@ For each platform, exercise these steps:
 - **Linux limits:** use a current Ubuntu/Debian desktop with supported
   upstream runtime libraries, Git and curl. No other distro, driver, headless
   server, WSL/remote workflow or obsolete OS is automated.
-- **Persistent files:** the reviewed prompt is saved at
-  `~/.local/share/local-ai-setup/gemini-prompt.txt` on Mac/Linux or
-  `%LOCALAPPDATA%\LocalAISetup\gemini-prompt.txt` on Windows. jq, if needed,
+- **Persistent files:** the reviewed prompt is saved as
+  `Local-AI-Gemini-Prompt.txt` in your **Documents** folder. Windows uses the
+  system Documents location (including OneDrive redirection); Linux respects
+  `xdg-user-dir DOCUMENTS` when available, otherwise uses `~/Documents`.
+  Each run replaces that prompt file. The full path is printed. A synced
+  Documents folder may sync this hardware-only file through your normal cloud
+  backup service; the wizard itself does not upload it. jq, if needed,
   lives only under the Mac/Linux setup folder's `bin`. Temporary installer
   files are cleaned up at exit; installed apps, models and Local AI remain.
   Nothing is uploaded automatically.

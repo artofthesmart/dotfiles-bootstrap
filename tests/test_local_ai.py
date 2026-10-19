@@ -135,6 +135,7 @@ class WizardTests(unittest.TestCase):
         self.source = "source " + shlex.quote(str(SCRIPT)) + "; "
         self.state = self.home / ".local/share/local-ai-setup"
         self.state.mkdir(parents=True)
+        self.prompt = self.home / "Documents/Local-AI-Gemini-Prompt.txt"
         self.prefix = self.source + (
             f'OS=Linux; ARCH=amd64; OS_VERSION=fixture; STATE={shlex.quote(str(self.state))}; '
             f'WORK={shlex.quote(str(self.base / "work"))}; mkdir -p "$WORK"; '
@@ -181,6 +182,9 @@ class WizardTests(unittest.TestCase):
         self.assertEqual(chat["model"], "local-ai-model-q4")
         self.assertEqual(chat["options"]["num_ctx"], 8192)
         self.assertIn("tool-call check passed", result.stdout)
+        self.assertIn("https://ollama.com/library", result.stdout)
+        self.assertIn("You do not need to download it in the Ollama app", result.stdout)
+        self.assertIn("this wizard downloads it after you confirm", result.stdout)
         self.assertIn("PARAMETER num_ctx 8192", (self.base / "work/Modelfile").read_text())
 
     def test_gguf_import_with_spaces(self):
@@ -253,13 +257,22 @@ class WizardTests(unittest.TestCase):
         self.env["FAIL_NVIDIA"] = "1"
         result = self.run_shell("hardware_prompt", "\nn\n\n")
         self.assertEqual(result.returncode, 0, result.stderr)
-        prompt = (self.state / "gemini-prompt.txt").read_text()
+        prompt = self.prompt.read_text()
         for forbidden in [str(self.home), str(self.repo), os.environ.get("USER", "root"), "not-used.invalid"]:
             self.assertNotIn(forbidden, prompt)
         self.assertIn("GPU memory: unknown", prompt)
         self.assertIn("TOOL CALLING", prompt)
         self.assertIn("nvidia-smi failed", result.stdout)
 
+    def test_documents_location_respects_redirect_and_disabled_xdg(self):
+        redirected = self.home / "My Documents"
+        result = self.run_shell(
+            'xdg-user-dir() { printf "%s" "$HOME/My Documents"; }; prompt_path')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, str(redirected / "Local-AI-Gemini-Prompt.txt"))
+        self.assertTrue(redirected.is_dir())
+        result = self.run_shell('xdg-user-dir() { printf "%s" "$HOME"; }; prompt_path')
+        self.assertEqual(result.stdout, str(self.prompt))
     def test_apple_translation_and_intel_cpu_warning(self):
         for name in ["uname", "sw_vers", "sysctl"]:
             self.stub(name)
@@ -270,7 +283,7 @@ class WizardTests(unittest.TestCase):
         result = self.run_shell("detect_platform; hardware_prompt", "\nn\n\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("CPU-only", result.stdout)
-        self.assertIn("CPU only", (self.state / "gemini-prompt.txt").read_text())
+        self.assertIn("CPU only", self.prompt.read_text())
 
     def test_unsupported_os_arch_and_macos_version(self):
         for name in ["uname", "sw_vers", "sysctl"]:
@@ -388,7 +401,7 @@ class WizardTests(unittest.TestCase):
         for row in self.calls("code"):
             if "--install-extension" in row:
                 self.assertIn("Local AI", row)
-        self.assertTrue((self.state / "gemini-prompt.txt").exists())
+        self.assertTrue(self.prompt.exists())
 
 
 if __name__ == "__main__":

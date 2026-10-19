@@ -1,9 +1,7 @@
 # Local coding AI: Windows
 
 **Outcome:** use VS Code's Chat and Agent tools with Ollama running a model on
-your computer, without per-request cloud-model charges. Model quality and speed
-depend on your hardware, especially available graphics memory. This does not
-make cloud Copilot services free.
+your computer, without per-request cloud-model charges. Model quality and speed depend on your hardware. Cloud Copilot remains separate.
 
 ## Start here
 
@@ -29,18 +27,19 @@ override managed controls.
 ## Follow the wizard
 
 1. **Install missing apps.** Existing VS Code and Ollama installations are reused,
-   including standard installs not yet on your command path. Approve official
-   user installers when needed. The wizard checks their signatures. VS Code
-   must be 1.127 or newer; no Python or package manager is required.
+   Approve official user installers when needed; signatures are checked.
+   VS Code must be 1.127 or newer.
    Downloads show the app name, MB/GB, percentage when available, and speed.
    Ollama includes GPU libraries: allow 4 GB installed, plus separate model space.
 2. **Ask Gemini what fits.** Review and paste the hardware-only prompt into
    Gemini yourself; nothing is sent automatically. It requests a tool-capable
-   local model, exact Ollama Library tag and link, storage size, context budget
-   and smaller fallback. Missing graphics memory is marked unknown; enter it
-   from your device specifications if available. A recommendation is not a
-   performance guarantee.
-3. **Download and test.** Enter the tag, storage estimate and context budget.
+   local    model, exact Ollama name and link, storage size, context budget
+   and smaller fallback. The prompt is saved in **Documents/Local-AI-Gemini-Prompt.txt**.
+   A recommendation is not a performance guarantee.
+3. **Choose and download locally.** Browse [Ollama's catalog](https://ollama.com/library)
+   for the small, tool-capable model Gemini recommended. Copy the name after
+   `ollama run`, including its size tag. Enter that name, storage estimate and
+   context budget here; the wizard downloads it. No manual model download is needed.
    The wizard checks local inference and a harmless tool request without
    executing that tool, then provides a `local-ai-...` model copy with your
    context budget. Compatible Hugging Face GGUF files have a guided manual
