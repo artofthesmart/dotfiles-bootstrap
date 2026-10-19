@@ -17,6 +17,18 @@ With PowerShell installed, run:
 pwsh -NoProfile -File tests/test-local-ai.ps1
 ```
 
+Exercise the real PowerShell download loop against a local server (Python and
+`pwsh` required; alternatively set `PWSH` to the PowerShell executable):
+
+```sh
+python3 -m unittest discover -s tests -p 'test_windows_download.py' -v
+```
+
+This covers readable app-labelled download progress, known and unknown total
+sizes, byte-for-byte transfer, HTTP failures, truncated-transfer cleanup, and
+HTTPS source validation. It downloads fixtures, not actual installers.
+The Windows wizard uses built-in progress rendering and needs no UI module.
+
 On native Windows PowerShell:
 
 ```powershell

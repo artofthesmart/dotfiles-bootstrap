@@ -33,41 +33,110 @@ function Get-Code {
 function Get-Ollama {
     return Get-Application 'ollama.exe' @("$env:LOCALAPPDATA\Programs\Ollama\ollama.exe")
 }
-function Save-Download([string]$Uri, [string]$Destination) {
+function Write-SetupStep([int]$Number, [string]$Title) {
+    Write-Host "`n[$Number/4] $Title" -ForegroundColor Cyan
+}
+function Format-DownloadSize([long]$Bytes) {
+    if ($Bytes -ge 1GB) { return ('{0:N1} GB' -f ($Bytes / 1GB)) }
+    return ('{0:N1} MB' -f ($Bytes / 1MB))
+}
+function New-DownloadRequest([uri]$Uri) {
+    $request = [Net.WebRequest]::Create($Uri)
+    $request.Timeout = 30000
+    $request.ReadWriteTimeout = 30000
+    return $request
+}
+function Save-Download([string]$Uri, [string]$Destination, [string]$Name = 'installer') {
     # Windows PowerShell's default protocols may not include TLS 1.2.
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-    Invoke-WebRequest -UseBasicParsing -Uri $Uri -OutFile $Destination -TimeoutSec 1800
+    if (([uri]$Uri).Scheme -ne 'https') { throw 'Installer downloads must use HTTPS.' }
+    Write-Host "Downloading $Name from the official source..." -ForegroundColor Cyan
+    $response = $null
+    $inputStream = $null
+    $file = $null
+    $complete = $false
+    $createdFile = $false
+    try {
+        Write-Progress -Id 1 -Activity "Downloading $Name" -Status 'Connecting to the download server...' -PercentComplete -1
+        $response = (New-DownloadRequest ([uri]$Uri)).GetResponse()
+        $total = $response.ContentLength
+        if ($total -gt 0) { Write-Host "Download size: $(Format-DownloadSize $total). The installer opens when this finishes." }
+        else { Write-Host 'The server did not report a total size. Showing the amount downloaded instead.' }
+        $inputStream = $response.GetResponseStream()
+        $file = [IO.File]::Create($Destination)
+        $createdFile = $true
+        $buffer = New-Object byte[] 65536
+        $received = 0L
+        $timer = [Diagnostics.Stopwatch]::StartNew()
+        $lastUpdate = -1.0
+        while (($count = $inputStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            $file.Write($buffer, 0, $count)
+            $received += $count
+            $seconds = $timer.Elapsed.TotalSeconds
+            if ($seconds -gt 1800) { throw 'Download exceeded 30 minutes. Check your connection and rerun.' }
+            if (($seconds - $lastUpdate) -ge 0.25) {
+                $speed = Format-DownloadSize ([long]($received / [math]::Max($seconds, 0.001)))
+                $status = "$(Format-DownloadSize $received) downloaded | $speed/s"
+                $percent = -1
+                if ($total -gt 0) {
+                    $percent = [int][math]::Min(99, [math]::Floor(100.0 * $received / $total))
+                    $status = "$percent% | $(Format-DownloadSize $received) of $(Format-DownloadSize $total) | $speed/s"
+                }
+                Write-Progress -Id 1 -Activity "Downloading $Name" -Status $status -PercentComplete $percent
+                $lastUpdate = $seconds
+            }
+        }
+        if ($received -eq 0 -or ($total -ge 0 -and $received -ne $total)) {
+            throw 'The download ended before the complete installer arrived. Rerun to try again.'
+        }
+        $file.Flush()
+        $complete = $true
+    } finally {
+        if ($null -ne $file) { $file.Dispose() }
+        if ($null -ne $inputStream) { $inputStream.Dispose() }
+        if ($null -ne $response) { $response.Dispose() }
+        Write-Progress -Id 1 -Activity "Downloading $Name" -Completed
+        if ($createdFile -and -not $complete) { Remove-Item -LiteralPath $Destination -Force }
+    }
+    Write-Host "Downloaded $Name ($(Format-DownloadSize $received))." -ForegroundColor Green
 }
 function Install-Applications {
     $script:Code = Get-Code
     if (-not $script:Code) {
         if (-not (Confirm-Step 'Download and run the official VS Code Windows x64 user installer (in your account)')) { throw 'VS Code is required.' }
         $installer = Join-Path $script:Work 'VSCodeUserSetup.exe'
-        Save-Download 'https://update.code.visualstudio.com/latest/win32-x64-user/stable' $installer
+        Save-Download 'https://update.code.visualstudio.com/latest/win32-x64-user/stable' $installer 'VS Code'
+        Write-Host 'Checking the Microsoft installer signature...'
         Assert-SignedInstaller $installer 'Microsoft'
+        Write-Host 'Opening the VS Code installer. Finish its setup window to continue.'
         $process = Start-Process -FilePath $installer -PassThru
         # Wait only for the installer, not editor/server processes it launches.
         $process.WaitForExit()
         if ($process.ExitCode -ne 0) { throw "VS Code installer exited $($process.ExitCode)." }
         $script:Code = Get-Code
         if (-not $script:Code) { throw 'VS Code was not found after installation. Finish installing it and rerun.' }
-    }
+    } else { Write-Host 'VS Code is already installed; no download needed.' -ForegroundColor Green }
     $versionLines = @(& $script:Code --version)
     if ($LASTEXITCODE -ne 0 -or $versionLines.Count -eq 0) { throw 'Cannot read VS Code version.' }
     $version = [version]($versionLines[0].Trim())
     if ($version -lt [version]'1.127.0') { throw 'Update VS Code to 1.127+ for the official Ollama extension, then rerun.' }
     $script:Ollama = Get-Ollama
     if (-not $script:Ollama) {
+        Write-Host "`nOllama is the engine that runs AI on your computer."
+        Write-Host 'Its Windows installer includes the app and GPU-support libraries, so it is a large download.'
+        Write-Host 'Allow at least 4 GB of disk space for Ollama itself. The AI model is a separate download later.'
         if (-not (Confirm-Step 'Download and run the official Ollama Windows installer (normally in your account)')) { throw 'Ollama is required.' }
         $installer = Join-Path $script:Work 'OllamaSetup.exe'
-        Save-Download 'https://ollama.com/download/OllamaSetup.exe' $installer
+        Save-Download 'https://ollama.com/download/OllamaSetup.exe' $installer 'Ollama'
+        Write-Host 'Checking the Ollama installer signature...'
         Assert-SignedInstaller $installer 'Ollama'
+        Write-Host 'Opening the Ollama installer. Finish its setup window to continue.'
         $process = Start-Process -FilePath $installer -PassThru
         $process.WaitForExit()
         if ($process.ExitCode -ne 0) { throw "Ollama installer exited $($process.ExitCode)." }
         $script:Ollama = Get-Ollama
         if (-not $script:Ollama) { throw 'Ollama was not found after installation. Finish installing it and rerun.' }
-    }
+    } else { Write-Host 'Ollama is already installed; no installer download needed.' -ForegroundColor Green }
     Invoke-Native $script:Ollama @('--version')
 }
 function Assert-SignedInstaller([string]$Path, [string]$Publisher) {
@@ -316,7 +385,9 @@ function Start-LocalAISetup {
     if ([version]$osInfo.Version -lt [version]'10.0.19045') { throw 'Windows 10 22H2 or newer is required.' }
     $architecture = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
     if ($architecture -ne 'AMD64') { throw 'This wizard currently automates Windows x64 only; ARM64 requires a separately validated install path.' }
-    Write-Host 'LOCAL AI SETUP: apps > hardware prompt for Gemini > local model check > VS Code. Enter q at a prompt to stop.'
+    Write-Host "`nLOCAL AI SETUP" -ForegroundColor Cyan
+    Write-Host 'Four steps: install apps, choose a model, check it, connect VS Code.'
+    Write-Host 'We ask before installing or downloading models. Enter q at a prompt to stop.'
     $script:State = Join-Path $env:LOCALAPPDATA 'LocalAISetup'
     [void][IO.Directory]::CreateDirectory($script:State)
     $script:Work = Join-Path ([IO.Path]::GetTempPath()) ('local-ai-setup-' + [guid]::NewGuid().ToString('N'))
@@ -324,8 +395,10 @@ function Start-LocalAISetup {
     $previousHost = $env:OLLAMA_HOST
     $env:OLLAMA_HOST = '127.0.0.1:11434'
     try {
+        Write-SetupStep 1 'Install or reuse VS Code and Ollama'
         Install-Applications
         Wait-Ollama
+        Write-SetupStep 2 'Find a model that fits your computer'
         $script:ModelStorage = if ($env:OLLAMA_MODELS) { $env:OLLAMA_MODELS } else { Join-Path $HOME '.ollama\models' }
         Write-Host "Model storage default: $script:ModelStorage"
         $storage = Read-Choice 'If your running Ollama server uses different model storage, enter its absolute directory (Enter to keep default)'
@@ -337,7 +410,9 @@ function Start-LocalAISetup {
         }
         Write-HardwarePrompt
         Select-LocalModel
+        Write-SetupStep 3 'Check that the local model can use tools'
         Test-LocalModel
+        Write-SetupStep 4 'Connect VS Code and open your repository'
         Connect-Code
     } finally {
         $env:OLLAMA_HOST = $previousHost
