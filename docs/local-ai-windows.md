@@ -32,6 +32,8 @@ override managed controls.
    including standard installs not yet on your command path. Approve official
    user installers when needed. The wizard checks their signatures. VS Code
    must be 1.127 or newer; no Python or package manager is required.
+   Downloads show the app name, MB/GB, percentage when available, and speed.
+   Ollama includes GPU libraries: allow 4 GB installed, plus separate model space.
 2. **Ask Gemini what fits.** Review and paste the hardware-only prompt into
    Gemini yourself; nothing is sent automatically. It requests a tool-capable
    local model, exact Ollama Library tag and link, storage size, context budget
