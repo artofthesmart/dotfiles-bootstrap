@@ -116,8 +116,14 @@ For each platform, exercise these steps:
   below that. The conservative wizard default prioritizes memory headroom, not
   full agent capability; Gemini is asked to identify hardware that cannot
   meet the recommendation. Smaller-context setups are constrained.
-- **Slow/no response:** the smoke test allows 180 seconds and up to 256 output
-  tokens. A valid but slow/reasoning model may fail this check. Inspect Ollama
+- **Slow/no response:** the smoke test allows 180 seconds. Windows allows 1024
+  output tokens initially; Bash currently allows 256. A slow/reasoning model
+  may exhaust this budget without returning a tool call. Windows reports the
+  model and stop reason, offers a 2048-token retry, or explicitly allows
+  continuing to VS Code with tool use **UNVERIFIED**. This is not a passed
+  check; test a real approved edit and switch models if tools fail. HTTP and
+  inference errors still stop setup rather than being treated as unverified
+  successful inference. Inspect Ollama
   logs, choose a smaller/faster model or reduce context, then rerun.
   `ollama ps` displays actual CPU/GPU offload after the check; an installed
   driver alone is not evidence of GPU inference. Intel Mac Ollama is CPU-only.

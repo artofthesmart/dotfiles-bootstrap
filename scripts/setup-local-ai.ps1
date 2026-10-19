@@ -319,10 +319,11 @@ function Select-LocalModel {
     [IO.File]::WriteAllText($modelfile, "FROM $script:Model`nPARAMETER num_ctx $script:Context`n")
     Invoke-Native $script:Ollama @('create', $script:LocalModel, '-f', $modelfile)
 }
-function Test-LocalModel {
+function Test-LocalModel([int]$OutputTokens = 1024) {
+    $script:ToolCheckPassed = $false
     $body = @{
         model = $script:LocalModel; stream = $false
-        options = @{ num_ctx = $script:Context; num_predict = 256; temperature = 0 }
+        options = @{ num_ctx = $script:Context; num_predict = $OutputTokens; temperature = 0 }
         messages = @(@{ role = 'user'; content = 'Call local_ai_check with value ready. Do not answer in prose.' })
         tools = @(@{
             type = 'function'
@@ -346,12 +347,48 @@ function Test-LocalModel {
                 $call.function.arguments.PSObject.Properties['value'] -and $call.function.arguments.value -ceq 'ready') { $valid = $true }
         }
     }
-    if (-not $valid) { throw 'Model did not produce the expected tool call. Try a reliable tool-capable model or a compatible GGUF template.' }
+    if (-not $valid) {
+        $reason = 'not reported'
+        if ($response.PSObject.Properties['done_reason']) { $reason = [string]$response.done_reason }
+        $detail = 'No matching tool call was returned.'
+        if ($reason -eq 'length') {
+            $detail = "The model reached the $OutputTokens-token output limit before completing the check. Reasoning may have used that budget."
+        }
+        throw [IO.InvalidDataException]::new(
+            "Model $script:LocalModel downloaded successfully, but tool use is NOT verified. $detail Stop reason: $reason. A reply in Ollama chat alone does not prove Agent tool support.")
+    }
+    $script:ToolCheckPassed = $true
     Write-Host 'Local tool-call check passed. Actual runtime/offload:'
     Invoke-Native $script:Ollama @('ps')
     Write-Host 'CPU-only offload can be slow even with a GPU installed. No GPU drivers were changed.'
 }
+function Confirm-LocalModelTools {
+    $budget = 1024
+    while ($true) {
+        try { Test-LocalModel -OutputTokens $budget; return }
+        catch [IO.InvalidDataException] {
+            Write-Warning $_.Exception.Message
+            Write-Host 'Your downloaded model is still available; you do not need to download it again.'
+            Write-Host '1 = retry with a larger output budget (2048 tokens; may take longer)'
+            Write-Host '2 = continue to VS Code with tool use UNVERIFIED; test an approved edit there'
+            Write-Host 'q = stop and rerun with a different tool-capable model'
+            switch (Read-Choice 'Choose 1 or 2') {
+                '1' { $budget = 2048 }
+                '2' {
+                    Write-Warning 'Continuing with tool use UNVERIFIED. The model may not work in Agent mode; no tool check has passed.'
+                    return
+                }
+                default { throw 'Choose 1 or 2, or q to stop.' }
+            }
+        }
+    }
+}
 function Connect-Code {
+    if ($script:ToolCheckPassed) {
+        Write-Host 'The local tool-call check passed. VS Code Agent behavior still needs your confirmation.'
+    } else {
+        Write-Warning 'Local tool use is UNVERIFIED. Test an approved edit in VS Code; choose another model if Agent tools fail.'
+    }
     if (-not (Confirm-Step 'Create/reuse Local AI and install official GitHub.copilot-chat and Ollama.ollama extensions only for that profile')) { throw 'Profile setup cancelled.' }
     Invoke-Native $script:Code @('--profile', 'Local AI', '--install-extension', 'GitHub.copilot-chat')
     Invoke-Native $script:Code @('--profile', 'Local AI', '--install-extension', 'Ollama.ollama')
@@ -385,7 +422,7 @@ Finish in the Local AI window (these UI steps are not automated):
    plan and organization policy apply. Return via Profiles > Local AI and
    explicitly select $script:LocalModel again. Profiles are not billing boundaries.
 
-The model check passed; VS Code Agent behavior still needs your confirmation.
+VS Code Agent behavior still needs your confirmation.
 Local inference has no per-request cloud-model fee but uses your hardware.
 Other Copilot features, including gray-text completions, are separate.
 No offline, telemetry, firewall, auto-approval or update settings were changed.
@@ -429,7 +466,7 @@ function Start-LocalAISetup {
         Write-HardwarePrompt
         Select-LocalModel
         Write-SetupStep 3 'Check that the local model can use tools'
-        Test-LocalModel
+        Confirm-LocalModelTools
         Write-SetupStep 4 'Connect VS Code and open your repository'
         Connect-Code
     } finally {

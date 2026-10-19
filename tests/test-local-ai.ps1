@@ -39,6 +39,7 @@ $script:LocalModel = 'fixture-model'
 $script:Answers = [Collections.Generic.Queue[string]]::new()
 $script:Calls = [Collections.Generic.List[object]]::new()
 $script:Mode = 'ok'
+$script:ToolCheckPassed = $false
 $script:PromptFolder = Join-Path $script:Fixture 'Documents'
 function Get-PromptPath {
     [void][IO.Directory]::CreateDirectory($script:PromptFolder)
@@ -68,6 +69,9 @@ function Invoke-OllamaApi([string]$Endpoint, $Body = $null) {
     }
     if ($Endpoint -eq 'chat') {
         $script:LastBody = $Body
+        if ($script:Mode -eq 'length' -and $Body.options.num_predict -lt 2048) {
+            return [pscustomobject]@{ done = $true; done_reason = 'length'; message = [pscustomobject]@{ thinking = 'fixture reasoning' } }
+        }
         if ($script:Mode -eq 'no-call') { return [pscustomobject]@{ done = $true; message = [pscustomobject]@{ content = 'hello' } } }
         if ($script:Mode -eq 'malformed') { return [pscustomobject]@{ unexpected = 1 } }
         $value = if ($script:Mode -eq 'wrong-call') { 'wrong' } else { 'ready' }
@@ -166,8 +170,32 @@ try {
     Test-Case 'Absent wrong malformed and HTTP-error tool responses fail' {
         foreach ($mode in @('no-call', 'wrong-call', 'malformed', 'http-error')) {
             $script:Mode = $mode
-            Assert-Throws { Test-LocalModel } 'expected tool call|HTTP 500'
+            Assert-Throws { Test-LocalModel } 'NOT verified|HTTP 500'
         }
+        $script:Mode = 'ok'
+    }
+    Test-Case 'Unverified tools require explicit choice and never set passed' {
+        $script:Mode = 'no-call'
+        Set-Answers @('2')
+        Confirm-LocalModelTools
+        Assert-True (-not $script:ToolCheckPassed) 'Failed check was marked passed'
+        Set-Answers @('q')
+        Assert-Throws { Confirm-LocalModelTools } 'cancelled'
+        $script:Mode = 'http-error'
+        Set-Answers @('2')
+        Assert-Throws { Confirm-LocalModelTools } 'HTTP 500'
+        $script:Mode = 'ok'
+        Confirm-LocalModelTools
+        Assert-True $script:ToolCheckPassed 'Successful check not recorded'
+        Assert-True ($script:LastBody.options.num_predict -eq 1024) 'Insufficient initial output budget'
+    }
+    Test-Case 'Reasoning output limit is explained and larger-budget retry can pass' {
+        $script:Mode = 'length'
+        Assert-Throws { Test-LocalModel } '1024-token output limit'
+        Set-Answers @('1')
+        Confirm-LocalModelTools
+        Assert-True $script:ToolCheckPassed 'Retry did not pass'
+        Assert-True ($script:LastBody.options.num_predict -eq 2048) 'Retry did not increase output budget'
         $script:Mode = 'ok'
     }
     Test-Case 'Profile scope is explicit for every code CLI operation' {
