@@ -39,6 +39,12 @@ $script:LocalModel = 'fixture-model'
 $script:Answers = [Collections.Generic.Queue[string]]::new()
 $script:Calls = [Collections.Generic.List[object]]::new()
 $script:Mode = 'ok'
+$script:ToolCheckPassed = $false
+$script:PromptFolder = Join-Path $script:Fixture 'Documents'
+function Get-PromptPath {
+    [void][IO.Directory]::CreateDirectory($script:PromptFolder)
+    return Join-Path $script:PromptFolder 'Local-AI-Gemini-Prompt.txt'
+}
 
 function Read-Choice([string]$Message) {
     if ($script:Answers.Count -eq 0) { throw "Fixture ran out of answers: $Message" }
@@ -63,6 +69,9 @@ function Invoke-OllamaApi([string]$Endpoint, $Body = $null) {
     }
     if ($Endpoint -eq 'chat') {
         $script:LastBody = $Body
+        if ($script:Mode -eq 'length' -and $Body.options.num_predict -lt 2048) {
+            return [pscustomobject]@{ done = $true; done_reason = 'length'; message = [pscustomobject]@{ thinking = 'fixture reasoning' } }
+        }
         if ($script:Mode -eq 'no-call') { return [pscustomobject]@{ done = $true; message = [pscustomobject]@{ content = 'hello' } } }
         if ($script:Mode -eq 'malformed') { return [pscustomobject]@{ unexpected = 1 } }
         $value = if ($script:Mode -eq 'wrong-call') { 'wrong' } else { 'ready' }
@@ -100,10 +109,14 @@ try {
     Test-Case 'Hardware prompt is allowlisted and unknown VRAM stays unknown' {
         Set-Answers @('', 'n', '')
         Write-HardwarePrompt
-        $text = [IO.File]::ReadAllText((Join-Path $script:State 'gemini-prompt.txt'))
+        $text = [IO.File]::ReadAllText((Get-PromptPath))
+        Assert-True ((Get-PromptPath) -match 'Documents[/\\]Local-AI-Gemini-Prompt.txt$') 'Prompt is not in Documents'
         Assert-True ($text -match 'GPU memory: Unknown') 'Unknown VRAM not preserved'
         Assert-True ($text -notmatch 'DO-NOT-SHARE|AdapterRAM: 1') 'Hardware prompt leaked an excluded field'
         Assert-True ($text -match 'TOOL CALLING') 'No tool capability requirement'
+        Assert-True ($text -match '(?m)^MODEL: .+\r?\nCONTEXT_TOKENS: .+\r?\nDOWNLOAD_GIB: ') 'Missing ordered copy-back block'
+        Assert-True ($text -match 'before\r?\nany greeting') 'Copy-back block is not required first'
+        Assert-True ($text -match 'structured Ollama API tool_calls') 'Missing structured tool-call evidence requirement'
     }
     Test-Case 'Model acquisition creates context-budget alias' {
         Set-Answers @('1', 'model:q4', '4', '16384', 'y')
@@ -160,8 +173,32 @@ try {
     Test-Case 'Absent wrong malformed and HTTP-error tool responses fail' {
         foreach ($mode in @('no-call', 'wrong-call', 'malformed', 'http-error')) {
             $script:Mode = $mode
-            Assert-Throws { Test-LocalModel } 'expected tool call|HTTP 500'
+            Assert-Throws { Test-LocalModel } 'NOT verified|HTTP 500'
         }
+        $script:Mode = 'ok'
+    }
+    Test-Case 'Unverified tools require explicit choice and never set passed' {
+        $script:Mode = 'no-call'
+        Set-Answers @('2')
+        Confirm-LocalModelTools
+        Assert-True (-not $script:ToolCheckPassed) 'Failed check was marked passed'
+        Set-Answers @('q')
+        Assert-Throws { Confirm-LocalModelTools } 'cancelled'
+        $script:Mode = 'http-error'
+        Set-Answers @('2')
+        Assert-Throws { Confirm-LocalModelTools } 'HTTP 500'
+        $script:Mode = 'ok'
+        Confirm-LocalModelTools
+        Assert-True $script:ToolCheckPassed 'Successful check not recorded'
+        Assert-True ($script:LastBody.options.num_predict -eq 1024) 'Insufficient initial output budget'
+    }
+    Test-Case 'Reasoning output limit is explained and larger-budget retry can pass' {
+        $script:Mode = 'length'
+        Assert-Throws { Test-LocalModel } '1024-token output limit'
+        Set-Answers @('1')
+        Confirm-LocalModelTools
+        Assert-True $script:ToolCheckPassed 'Retry did not pass'
+        Assert-True ($script:LastBody.options.num_predict -eq 2048) 'Retry did not increase output budget'
         $script:Mode = 'ok'
     }
     Test-Case 'Profile scope is explicit for every code CLI operation' {
@@ -170,6 +207,9 @@ try {
         Assert-True ($source -match "'--profile', 'Local AI', '--install-extension', 'Ollama.ollama'") 'Ollama extension not profile-scoped'
         Assert-True ($source -match "'--new-window', '--profile', 'Local AI', \`$repo") 'Repository launch not profile-scoped'
         Assert-True ($source -notmatch 'Invoke-Expression|Set-ExecutionPolicy|AdapterRAM\s*=') 'Unexpected unsafe/global behavior'
+        Assert-True ($source.Contains('Click the model selector')) 'Missing Desktop model-selector instruction'
+        Assert-True ($source.Contains('type "Say hello" and press Enter')) 'Missing simple first prompt'
+        Assert-True ($source.Contains('Return here and enter that same model name')) 'Missing return-to-wizard instruction'
     }
     Test-Case 'Installer signature mismatch rejected' {
         function Get-AuthenticodeSignature { return [pscustomobject]@{ Status = 'Valid'; SignerCertificate = [pscustomobject]@{ Subject = 'Untrusted publisher' } } }

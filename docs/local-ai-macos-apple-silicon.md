@@ -31,11 +31,12 @@ bash ./scripts/setup-local-ai.sh
    tool-capable local coding model, an exact Ollama Library tag, download link,
    size, context budget, and smaller fallback. Return with the recommendation;
    advice is a starting point, not a guarantee of an optimal model.
-3. **Download and check it.** Enter the tag, expected storage and context budget.
-   The wizard downloads it and checks a harmless tool request without executing
-   that tool. Its `local-ai-...` model copy remembers your context budget.
-   Hugging Face is a guided backup for compatible, manually downloaded GGUF
-   files, not an automatic installer for arbitrary models.
+3. **Download in Ollama.** Open Ollama from Applications. Click the model
+   selector; type Gemini's exact name including its size tag (such as `:32b`).
+   Select the local model, click its download icon if shown, type **Say hello**
+   and press Enter. Wait for a reply. Return to the wizard with that same name,
+   storage estimate and context budget. It reuses downloaded files and checks
+   tools. Alternatively, let the wizard download it.
 4. **Open your repository.** The wizard installs official Chat/Ollama extensions
    into a separate **Local AI** profile and opens your existing checkout.
    Follow its final instructions: select **Agent**, explicitly choose your

@@ -77,6 +77,9 @@ For each platform, exercise these steps:
 2. Confirm model-storage volume selection, disk estimates and the allowlisted
    hardware report. Review missing memory fields before sharing with Gemini.
    Confirm the wizard makes no Gemini call.
+    Check that its prompt requires Gemini to put `MODEL`, `CONTEXT_TOKENS` and
+    `DOWNLOAD_GIB` first, ahead of analysis, and to distinguish actual structured
+    tool-call evidence from coding benchmarks or JSON returned as ordinary text.
 3. Pull a real local tool-capable model. Try a compatible single-file GGUF
    import with a space-containing path and an incompatible model. Confirm
    advertised tools **and** actual expected tool-call output are checked.
@@ -116,8 +119,14 @@ For each platform, exercise these steps:
   below that. The conservative wizard default prioritizes memory headroom, not
   full agent capability; Gemini is asked to identify hardware that cannot
   meet the recommendation. Smaller-context setups are constrained.
-- **Slow/no response:** the smoke test allows 180 seconds and up to 256 output
-  tokens. A valid but slow/reasoning model may fail this check. Inspect Ollama
+- **Slow/no response:** the smoke test allows 180 seconds. Windows allows 1024
+  output tokens initially; Bash currently allows 256. A slow/reasoning model
+  may exhaust this budget without returning a tool call. Windows reports the
+  model and stop reason, offers a 2048-token retry, or explicitly allows
+  continuing to VS Code with tool use **UNVERIFIED**. This is not a passed
+  check; test a real approved edit and switch models if tools fail. HTTP and
+  inference errors still stop setup rather than being treated as unverified
+  successful inference. Inspect Ollama
   logs, choose a smaller/faster model or reduce context, then rerun.
   `ollama ps` displays actual CPU/GPU offload after the check; an installed
   driver alone is not evidence of GPU inference. Intel Mac Ollama is CPU-only.
@@ -139,9 +148,13 @@ For each platform, exercise these steps:
 - **Linux limits:** use a current Ubuntu/Debian desktop with supported
   upstream runtime libraries, Git and curl. No other distro, driver, headless
   server, WSL/remote workflow or obsolete OS is automated.
-- **Persistent files:** the reviewed prompt is saved at
-  `~/.local/share/local-ai-setup/gemini-prompt.txt` on Mac/Linux or
-  `%LOCALAPPDATA%\LocalAISetup\gemini-prompt.txt` on Windows. jq, if needed,
+- **Persistent files:** the reviewed prompt is saved as
+  `Local-AI-Gemini-Prompt.txt` in your **Documents** folder. Windows uses the
+  system Documents location (including OneDrive redirection); Linux respects
+  `xdg-user-dir DOCUMENTS` when available, otherwise uses `~/Documents`.
+  Each run replaces that prompt file. The full path is printed. A synced
+  Documents folder may sync this hardware-only file through your normal cloud
+  backup service; the wizard itself does not upload it. jq, if needed,
   lives only under the Mac/Linux setup folder's `bin`. Temporary installer
   files are cleaned up at exit; installed apps, models and Local AI remain.
   Nothing is uploaded automatically.

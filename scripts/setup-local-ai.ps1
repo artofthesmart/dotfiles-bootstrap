@@ -185,6 +185,12 @@ function Get-ModelVolume {
     $drive = [IO.DriveInfo]::new($root)
     return $drive
 }
+function Get-PromptPath {
+    $documents = [Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments)
+    if (-not $documents) { $documents = Join-Path $HOME 'Documents' }
+    [void][IO.Directory]::CreateDirectory($documents)
+    return Join-Path $documents 'Local-AI-Gemini-Prompt.txt'
+}
 function Write-HardwarePrompt {
     $osInfo = Get-CimInstance Win32_OperatingSystem
     $processors = @(Get-CimInstance Win32_Processor | Select-Object -ExpandProperty Name)
@@ -219,6 +225,16 @@ GPU memory: $vram
 Acceleration: $acceleration
 Free model-volume space: $free GiB
 
+REQUIRED RESPONSE FORMAT: Start your response with this copy-back block, before
+any greeting, explanation, heading, or analysis. Replace placeholders with values:
+MODEL: <exact local Ollama name:tag; no command, URL, backticks, or cloud model>
+CONTEXT_TOKENS: <integer tokens; e.g. 32768, not 32k>
+DOWNLOAD_GIB: <numeric additional storage estimate in GiB; no units>
+These are the values the user must copy into the setup wizard. Put MODEL first
+and CONTEXT_TOKENS second. Put ALL analysis, links, caveats and fallback choices
+AFTER this block. Do not invent a runnable recommendation if none is suitable:
+use MODEL: NONE and explain the blocker afterward.
+
 Use current official sources and provide links, not an assumed universal optimum.
 Recommend a primary and smaller fallback with reliable TOOL CALLING, exact LOCAL
 Ollama Library tag, model-page/download link, quantization, download size in GiB,
@@ -226,6 +242,10 @@ license/commercial-use caveats, realistic speed expectations, and memory headroo
 for OS, VS Code, model weights AND KV cache. Account for shared versus dedicated
 memory; do not add GPUs' VRAM together. Recommend a practical context size for
 agents and explain the quality/speed tradeoff. Do not suggest cloud inference.
+Require evidence of structured Ollama API tool_calls for the exact recommended
+variant/template, not just coding benchmarks, a tools label, or JSON in chat text.
+If exact-variant tool behavior is unverified, state that prominently after the
+copy-back block; do not promise VS Code Agent compatibility.
 The official VS Code Ollama extension recommends at least 65536 context tokens.
 If that will not fit, say explicitly that smaller-context agents are constrained;
 do not sacrifice OS/memory headroom or claim the machine meets that recommendation.
@@ -234,7 +254,7 @@ GGUF file and source page on https://huggingface.co, including architecture and
 chat-template/tool support caveats. Do not suggest executing repository code.
 State uncertainties and ask about missing hardware details instead of guessing.
 "@
-    $path = Join-Path $script:State 'gemini-prompt.txt'
+    $path = Get-PromptPath
     [IO.File]::WriteAllText($path, $promptText)
     Write-Host "`nReview this hardware-only prompt before sharing it with Gemini:`n$promptText"
     Write-Host "`nSaved to $path"
@@ -245,10 +265,22 @@ function Test-ModelName([string]$Name) {
     return $Name -cmatch '^[a-zA-Z0-9][a-zA-Z0-9._-]*(:[a-zA-Z0-9][a-zA-Z0-9._-]*)?$' -and $Name -notmatch 'cloud'
 }
 function Select-LocalModel {
+    Write-Host "`nChoose a small, tool-capable model from https://ollama.com/library to run on this computer."
+    Write-Host 'Use the Gemini recommendation to check that it fits your memory and supports Agent tools.'
+    Write-Host 'Download it in Ollama Desktop:'
+    Write-Host '  1. Open Ollama from the Start menu.'
+    Write-Host '  2. Click the model selector and type the exact name Gemini recommended, including any size tag like :32b.'
+    Write-Host '     Example format: qwen2.5-coder:32b. Use YOUR recommended tool-capable model, not this example automatically.'
+    Write-Host '  3. Select the matching LOCAL model and click its download icon if shown. Do not choose a cloud model.'
+    Write-Host '  4. In the message box, type "Say hello" and press Enter. If needed, Ollama downloads the model before replying.'
+    Write-Host '  5. Wait for the download to finish and a reply to appear. Return here and enter that same model name.'
+    Write-Host 'Prefer to stay here? Enter the model name below and the wizard can download it instead.'
+    Write-Host 'If already downloaded in Desktop, the wizard checks/reuses those files; it does not download an extra copy.'
+    Write-Host 'Choose local model weights, not a cloud model. The download may be several GB.'
     $source = Read-Choice 'Model source: 1 = Ollama Library (recommended), 2 = import a downloaded Hugging Face GGUF'
     $gguf = $null
     switch ($source) {
-        '1' { $script:Model = Read-Choice 'Exact local Ollama Library tag from Gemini (not a URL or command)' }
+        '1' { $script:Model = Read-Choice 'Paste the exact model name, including its size tag if shown (name only, without "ollama run")' }
         '2' {
             Write-Host 'Download a compatible single-file GGUF yourself. Check license, architecture, quantization and tool/chat-template support.'
             $gguf = Read-Choice 'Full path to the downloaded single-file .gguf'
@@ -301,10 +333,11 @@ function Select-LocalModel {
     [IO.File]::WriteAllText($modelfile, "FROM $script:Model`nPARAMETER num_ctx $script:Context`n")
     Invoke-Native $script:Ollama @('create', $script:LocalModel, '-f', $modelfile)
 }
-function Test-LocalModel {
+function Test-LocalModel([int]$OutputTokens = 1024) {
+    $script:ToolCheckPassed = $false
     $body = @{
         model = $script:LocalModel; stream = $false
-        options = @{ num_ctx = $script:Context; num_predict = 256; temperature = 0 }
+        options = @{ num_ctx = $script:Context; num_predict = $OutputTokens; temperature = 0 }
         messages = @(@{ role = 'user'; content = 'Call local_ai_check with value ready. Do not answer in prose.' })
         tools = @(@{
             type = 'function'
@@ -328,12 +361,48 @@ function Test-LocalModel {
                 $call.function.arguments.PSObject.Properties['value'] -and $call.function.arguments.value -ceq 'ready') { $valid = $true }
         }
     }
-    if (-not $valid) { throw 'Model did not produce the expected tool call. Try a reliable tool-capable model or a compatible GGUF template.' }
+    if (-not $valid) {
+        $reason = 'not reported'
+        if ($response.PSObject.Properties['done_reason']) { $reason = [string]$response.done_reason }
+        $detail = 'No matching tool call was returned.'
+        if ($reason -eq 'length') {
+            $detail = "The model reached the $OutputTokens-token output limit before completing the check. Reasoning may have used that budget."
+        }
+        throw [IO.InvalidDataException]::new(
+            "Model $script:LocalModel downloaded successfully, but tool use is NOT verified. $detail Stop reason: $reason. A reply in Ollama chat alone does not prove Agent tool support.")
+    }
+    $script:ToolCheckPassed = $true
     Write-Host 'Local tool-call check passed. Actual runtime/offload:'
     Invoke-Native $script:Ollama @('ps')
     Write-Host 'CPU-only offload can be slow even with a GPU installed. No GPU drivers were changed.'
 }
+function Confirm-LocalModelTools {
+    $budget = 1024
+    while ($true) {
+        try { Test-LocalModel -OutputTokens $budget; return }
+        catch [IO.InvalidDataException] {
+            Write-Warning $_.Exception.Message
+            Write-Host 'Your downloaded model is still available; you do not need to download it again.'
+            Write-Host '1 = retry with a larger output budget (2048 tokens; may take longer)'
+            Write-Host '2 = continue to VS Code with tool use UNVERIFIED; test an approved edit there'
+            Write-Host 'q = stop and rerun with a different tool-capable model'
+            switch (Read-Choice 'Choose 1 or 2') {
+                '1' { $budget = 2048 }
+                '2' {
+                    Write-Warning 'Continuing with tool use UNVERIFIED. The model may not work in Agent mode; no tool check has passed.'
+                    return
+                }
+                default { throw 'Choose 1 or 2, or q to stop.' }
+            }
+        }
+    }
+}
 function Connect-Code {
+    if ($script:ToolCheckPassed) {
+        Write-Host 'The local tool-call check passed. VS Code Agent behavior still needs your confirmation.'
+    } else {
+        Write-Warning 'Local tool use is UNVERIFIED. Test an approved edit in VS Code; choose another model if Agent tools fail.'
+    }
     if (-not (Confirm-Step 'Create/reuse Local AI and install official GitHub.copilot-chat and Ollama.ollama extensions only for that profile')) { throw 'Profile setup cancelled.' }
     Invoke-Native $script:Code @('--profile', 'Local AI', '--install-extension', 'GitHub.copilot-chat')
     Invoke-Native $script:Code @('--profile', 'Local AI', '--install-extension', 'Ollama.ollama')
@@ -367,7 +436,7 @@ Finish in the Local AI window (these UI steps are not automated):
    plan and organization policy apply. Return via Profiles > Local AI and
    explicitly select $script:LocalModel again. Profiles are not billing boundaries.
 
-The model check passed; VS Code Agent behavior still needs your confirmation.
+VS Code Agent behavior still needs your confirmation.
 Local inference has no per-request cloud-model fee but uses your hardware.
 Other Copilot features, including gray-text completions, are separate.
 No offline, telemetry, firewall, auto-approval or update settings were changed.
@@ -388,8 +457,6 @@ function Start-LocalAISetup {
     Write-Host "`nLOCAL AI SETUP" -ForegroundColor Cyan
     Write-Host 'Four steps: install apps, choose a model, check it, connect VS Code.'
     Write-Host 'We ask before installing or downloading models. Enter q at a prompt to stop.'
-    $script:State = Join-Path $env:LOCALAPPDATA 'LocalAISetup'
-    [void][IO.Directory]::CreateDirectory($script:State)
     $script:Work = Join-Path ([IO.Path]::GetTempPath()) ('local-ai-setup-' + [guid]::NewGuid().ToString('N'))
     [void][IO.Directory]::CreateDirectory($script:Work)
     $previousHost = $env:OLLAMA_HOST
@@ -398,7 +465,9 @@ function Start-LocalAISetup {
         Write-SetupStep 1 'Install or reuse VS Code and Ollama'
         Install-Applications
         Wait-Ollama
-        Write-SetupStep 2 'Find a model that fits your computer'
+        Write-SetupStep 2 'Choose and download a local Ollama model'
+        Write-Host 'First, review your hardware and ask Gemini which small, tool-capable model fits.'
+        Write-Host 'Then choose it from the Ollama catalog. This wizard will download it for you.'
         $script:ModelStorage = if ($env:OLLAMA_MODELS) { $env:OLLAMA_MODELS } else { Join-Path $HOME '.ollama\models' }
         Write-Host "Model storage default: $script:ModelStorage"
         $storage = Read-Choice 'If your running Ollama server uses different model storage, enter its absolute directory (Enter to keep default)'
@@ -411,7 +480,7 @@ function Start-LocalAISetup {
         Write-HardwarePrompt
         Select-LocalModel
         Write-SetupStep 3 'Check that the local model can use tools'
-        Test-LocalModel
+        Confirm-LocalModelTools
         Write-SetupStep 4 'Connect VS Code and open your repository'
         Connect-Code
     } finally {

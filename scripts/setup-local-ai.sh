@@ -152,8 +152,19 @@ ensure_server() {
     "$JQ" -e '.version | strings | length > 0' "$WORK/version.json" >/dev/null || fail "Invalid Ollama server response."
 }
 free_kib() { df -Pk "$MODEL_VOLUME" | awk 'END {print $4}'; }
+prompt_path() {
+    local documents="$HOME/Documents"
+    if [ "$OS" = Linux ] && command -v xdg-user-dir >/dev/null; then
+        documents=$(xdg-user-dir DOCUMENTS) || fail "Cannot locate your Documents folder."
+        [[ "$documents" = /* ]] || fail "Documents location must be an absolute path."
+        if [ "$documents" = "$HOME" ] || [ "$documents" = "$HOME/" ]; then documents="$HOME/Documents"; fi
+    fi
+    mkdir -p "$documents"
+    printf '%s/Local-AI-Gemini-Prompt.txt' "$documents"
+}
 hardware_prompt() {
-    local cpu ram gpu acceleration free_gib vram
+    local cpu ram gpu acceleration free_gib vram prompt_file
+    prompt_file=$(prompt_path)
     vram=unknown
     if [ "$OS" = Darwin ]; then
         cpu=$(sysctl -n machdep.cpu.brand_string)
@@ -198,6 +209,16 @@ hardware_prompt() {
             "$OS" "$OS_VERSION" "$ARCH" "$cpu" "$ram" "$gpu" "$vram" "$acceleration" "$free_gib"
         cat <<'PROMPT'
 
+REQUIRED RESPONSE FORMAT: Start your response with this copy-back block, before
+any greeting, explanation, heading, or analysis. Replace placeholders with values:
+MODEL: <exact local Ollama name:tag; no command, URL, backticks, or cloud model>
+CONTEXT_TOKENS: <integer tokens; e.g. 32768, not 32k>
+DOWNLOAD_GIB: <numeric additional storage estimate in GiB; no units>
+These are the values the user must copy into the setup wizard. Put MODEL first
+and CONTEXT_TOKENS second. Put ALL analysis, links, caveats and fallback choices
+AFTER this block. Do not invent a runnable recommendation if none is suitable:
+use MODEL: NONE and explain the blocker afterward.
+
 Use current official sources and provide links, not an assumed universal optimum.
 Recommend a primary and smaller fallback with reliable TOOL CALLING, exact LOCAL
 Ollama Library tag, model-page/download link, quantization, download size in GiB,
@@ -205,6 +226,10 @@ license/commercial-use caveats, realistic speed expectations, and memory headroo
 for OS, VS Code, model weights AND KV cache. Account for shared versus dedicated
 memory; do not add GPUs' VRAM together. Recommend a practical context size for
 agents and explain the quality/speed tradeoff. Do not suggest cloud inference.
+Require evidence of structured Ollama API tool_calls for the exact recommended
+variant/template, not just coding benchmarks, a tools label, or JSON in chat text.
+If exact-variant tool behavior is unverified, state that prominently after the
+copy-back block; do not promise VS Code Agent compatibility.
 The official VS Code Ollama extension recommends at least 65536 context tokens.
 If that will not fit, say explicitly that smaller-context agents are constrained;
 do not sacrifice OS/memory headroom or claim the machine meets that recommendation.
@@ -213,14 +238,14 @@ GGUF file and source page on https://huggingface.co, including architecture and
 chat-template/tool support caveats. Do not suggest executing repository code.
 State uncertainties and ask about missing hardware details instead of guessing.
 PROMPT
-    } > "$STATE/gemini-prompt.txt"
+    } > "$prompt_file"
     printf '\nReview this hardware-only prompt before sharing it with Gemini:\n\n'
-    cat "$STATE/gemini-prompt.txt"
-    printf '\nSaved to %s\n' "$STATE/gemini-prompt.txt"
+    cat "$prompt_file"
+    printf '\nSaved to %s\n' "$prompt_file"
     if confirm "Copy the reviewed prompt to the clipboard"; then
-        if command -v pbcopy >/dev/null; then pbcopy < "$STATE/gemini-prompt.txt"
-        elif command -v wl-copy >/dev/null; then wl-copy < "$STATE/gemini-prompt.txt"
-        elif command -v xclip >/dev/null; then xclip -selection clipboard < "$STATE/gemini-prompt.txt"
+        if command -v pbcopy >/dev/null; then pbcopy < "$prompt_file"
+        elif command -v wl-copy >/dev/null; then wl-copy < "$prompt_file"
+        elif command -v xclip >/dev/null; then xclip -selection clipboard < "$prompt_file"
         else printf 'No clipboard utility available. Copy the displayed text instead.\n'; fi
     fi
     ask "Paste it into Gemini yourself; return here with a model tag, size, and context recommendation, then press Enter"
@@ -231,11 +256,25 @@ valid_model() {
 }
 choose_model() {
     local source size needed available gguf import_path context
+    printf '\nChoose a small, tool-capable model from https://ollama.com/library to run on this computer.\n'
+    printf 'Use the Gemini recommendation to check that it fits your memory and supports Agent tools.\n'
+    if [ "$OS" = Darwin ]; then
+        printf 'Download it in Ollama Desktop:\n'
+        printf '  1. Open Ollama from Applications.\n'
+        printf '  2. Click the model selector and type the exact name Gemini recommended, including any size tag like :32b.\n'
+        printf '     Example format: qwen2.5-coder:32b. Use YOUR recommended tool-capable model, not this example automatically.\n'
+        printf '  3. Select the matching LOCAL model and click its download icon if shown. Do not choose a cloud model.\n'
+        printf '  4. Type "Say hello" in the message box and press Enter. If needed, Ollama downloads the model before replying.\n'
+        printf '  5. Wait for the download and reply. Return here and enter that same model name.\n'
+    fi
+    printf 'To download through this wizard instead, enter the exact model name and size tag below.\n'
+    printf 'If already downloaded in Desktop, the wizard checks/reuses those files; it does not download an extra copy.\n'
+    printf 'Choose local model weights, not a cloud model. The download may be several GB.\n'
     ask "Model source: 1 = Ollama Library (recommended), 2 = import a downloaded Hugging Face GGUF"
     source=$ANSWER
     case "$source" in
         1)
-            ask "Exact local Ollama Library tag from Gemini (not a URL or command)"
+            ask 'Paste the exact model name, including its size tag if shown (name only, without "ollama run")'
             MODEL=$ANSWER
             valid_model "$MODEL" || fail "Use a simple Library model[:tag], not a command, URL, namespace, or cloud model."
             ;;

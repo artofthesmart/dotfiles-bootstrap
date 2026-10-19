@@ -7,7 +7,7 @@ is useful for experimentation, not a promise of cloud-level performance.
 
 ## Start here
 
-You need an Intel Mac running macOS 14 or newer, internet access for setup,
+You need an Intel Mac running macOS 14+, internet for setup,
 and space for the applications and model. An unsupported older Mac is not
 upgraded or worked around by this script. Large models can require tens of
 gigabytes; start with a small tool-capable model.
@@ -34,11 +34,12 @@ bash ./scripts/setup-local-ai.sh
    caveats and an agent context budget. Emphasize **CPU-only Intel Mac**.
    No information is sent automatically; Gemini's recommendation is not proof
    that a model will be fast or useful.
-3. **Download a model and check tools.** Enter the recommended tag, storage
-   estimate and context budget. The wizard checks local inference and a harmless
-   tool request without executing that tool. It creates a `local-ai-...` copy
-   with your context budget. A compatible Hugging Face GGUF can instead be
-   downloaded manually and imported through the guided path.
+3. **Download in Ollama.** Open Ollama from Applications. Click the model
+   selector; type Gemini's exact name including its size tag. Select the local
+   model and click its download icon if shown. Type **Say hello**, press Enter
+   and wait for a reply. Return to the wizard with the same name, storage and
+   context budget. It reuses downloaded files and checks tools. Alternatively,
+   let the wizard download it.
 4. **Use the Local AI profile.** The wizard installs official Chat/Ollama
    extensions there, preserving your original profile, and opens your checkout.
    Follow the final UI instructions: choose **Agent**, explicitly select your
