@@ -1,8 +1,9 @@
 # Installer sources and update guide
 
-Last reviewed: 2026-10-11
+Last reviewed: 2026-10-19
 
-This inventory covers `bootstrap.sh`, `setup.py`, and `setup_termux.sh`.
+This inventory covers `bootstrap.sh`, `setup.py`, `setup_termux.sh`, and the
+independent local-AI wizards under `scripts/`.
 Prefer each project's official documentation or release page when changing
 installer URLs, package names, versions, or platform assumptions.
 
@@ -110,3 +111,37 @@ Prefer signed package repositories or versioned releases over unpinned remote
 scripts where practical. After changing an installer source, test the selected
 component on the target OS; test unattended mode separately if the script is
 used on a headless host.
+
+## Local AI VS Code wizards
+
+`scripts/setup-local-ai.sh` supports macOS 14+ on Apple Silicon/Intel and
+Ubuntu/Debian desktops on x86-64/ARM64. `scripts/setup-local-ai.ps1` targets
+Windows x64 10 22H2+ and Windows PowerShell 5.1+/PowerShell 7. Native installers,
+GPU behavior and VS Code Agent workflows require real-machine acceptance;
+mocked test success is not proof of platform compatibility.
+
+| Component / behavior | Primary reference |
+|---|---|
+| VS Code platform downloads, official Debian package installation, app/CLI paths | [macOS](https://code.visualstudio.com/docs/setup/mac), [Windows](https://code.visualstudio.com/docs/setup/windows), [Linux](https://code.visualstudio.com/docs/setup/linux) |
+| VS Code update endpoints: `latest/darwin/stable` (Intel ZIP), `latest/darwin-arm64/stable`, `latest/linux-deb-x64/stable`, `latest/linux-deb-arm64/stable`, `latest/win32-x64-user/stable`, under `https://update.code.visualstudio.com/` | [VS Code download API](https://code.visualstudio.com/docs/supporting/faq#_previous-release-versions); verify actual redirects before changing format/architecture assumptions |
+| Ollama `.dmg`, Windows user installer, Linux installer downloaded for review before execution | [macOS](https://docs.ollama.com/macos), [Windows](https://docs.ollama.com/windows), [Linux](https://docs.ollama.com/linux), [official releases](https://github.com/ollama/ollama/releases) |
+| Official `Ollama.ollama` provider extension; current manifest requires VS Code 1.127+; default loopback discovery | [Ollama extension](https://github.com/ollama/ollama-vscode), [manifest](https://github.com/ollama/ollama-vscode/blob/main/package.json) |
+| Per-model `num_ctx` discovery and 65536-token recommendation for agents; smaller budgets warn and constrain work | [Provider](https://github.com/ollama/ollama-vscode/blob/main/src/provider.ts), [context handling](https://github.com/ollama/ollama-vscode/blob/main/src/contextLength.ts) |
+| Official `GitHub.copilot-chat` extension | [Manifest](https://github.com/microsoft/vscode-copilot-chat/blob/main/package.json) |
+| Named Local AI profile creation, profile-scoped installs and launch | [CLI](https://code.visualstudio.com/docs/configure/command-line), [profiles](https://code.visualstudio.com/docs/configure/profiles) |
+| BYOK agents, tool capability, utility models, deprecated built-in Ollama provider, account-dependent feature limits | [VS Code language models](https://code.visualstudio.com/docs/agent-customization/language-models) |
+| Local model pulls, GGUF import and context-budget aliases | [CLI](https://docs.ollama.com/cli), [import](https://docs.ollama.com/import), [Modelfile](https://docs.ollama.com/modelfile) |
+| Loopback API `/api/version`, `/api/show`, `/api/chat`, cloud metadata and tool-call validation | [Official API reference](https://github.com/ollama/ollama/blob/main/docs/api.md), [response types](https://github.com/ollama/ollama/blob/main/api/types.go) |
+| Optional jq 1.8.2 standalone binary, installed privately, checked against embedded architecture-specific SHA-256 | [jq downloads](https://jqlang.org/download/), [upstream checksums](https://raw.githubusercontent.com/jqlang/jq/master/sig/v1.8.2/sha256sum.txt) |
+
+The wizard does not call Gemini: it prepares an allowlisted prompt for the user
+to review and paste. Model choices are deliberately not pinned to a supposedly
+universal optimum. Prompt guidance asks Gemini for current model-source links,
+licenses, size, quantization, context and a smaller fallback. Hugging Face is a
+guided user download of a compatible single-file GGUF, not arbitrary repository
+execution.
+
+Only the optional jq helper is pinned and checksum-verified by the Bash wizard.
+App downloads follow upstream stable/current installer URLs over HTTPS; Windows
+also checks Authenticode publisher signatures. Do not describe all installer
+paths as release-pinned or independently checksum-verified.
