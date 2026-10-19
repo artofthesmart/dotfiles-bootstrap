@@ -114,6 +114,9 @@ try {
         Assert-True ($text -match 'GPU memory: Unknown') 'Unknown VRAM not preserved'
         Assert-True ($text -notmatch 'DO-NOT-SHARE|AdapterRAM: 1') 'Hardware prompt leaked an excluded field'
         Assert-True ($text -match 'TOOL CALLING') 'No tool capability requirement'
+        Assert-True ($text -match '(?m)^MODEL: .+\r?\nCONTEXT_TOKENS: .+\r?\nDOWNLOAD_GIB: ') 'Missing ordered copy-back block'
+        Assert-True ($text -match 'before\r?\nany greeting') 'Copy-back block is not required first'
+        Assert-True ($text -match 'structured Ollama API tool_calls') 'Missing structured tool-call evidence requirement'
     }
     Test-Case 'Model acquisition creates context-budget alias' {
         Set-Answers @('1', 'model:q4', '4', '16384', 'y')

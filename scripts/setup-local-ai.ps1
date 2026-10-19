@@ -225,6 +225,16 @@ GPU memory: $vram
 Acceleration: $acceleration
 Free model-volume space: $free GiB
 
+REQUIRED RESPONSE FORMAT: Start your response with this copy-back block, before
+any greeting, explanation, heading, or analysis. Replace placeholders with values:
+MODEL: <exact local Ollama name:tag; no command, URL, backticks, or cloud model>
+CONTEXT_TOKENS: <integer tokens; e.g. 32768, not 32k>
+DOWNLOAD_GIB: <numeric additional storage estimate in GiB; no units>
+These are the values the user must copy into the setup wizard. Put MODEL first
+and CONTEXT_TOKENS second. Put ALL analysis, links, caveats and fallback choices
+AFTER this block. Do not invent a runnable recommendation if none is suitable:
+use MODEL: NONE and explain the blocker afterward.
+
 Use current official sources and provide links, not an assumed universal optimum.
 Recommend a primary and smaller fallback with reliable TOOL CALLING, exact LOCAL
 Ollama Library tag, model-page/download link, quantization, download size in GiB,
@@ -232,6 +242,10 @@ license/commercial-use caveats, realistic speed expectations, and memory headroo
 for OS, VS Code, model weights AND KV cache. Account for shared versus dedicated
 memory; do not add GPUs' VRAM together. Recommend a practical context size for
 agents and explain the quality/speed tradeoff. Do not suggest cloud inference.
+Require evidence of structured Ollama API tool_calls for the exact recommended
+variant/template, not just coding benchmarks, a tools label, or JSON in chat text.
+If exact-variant tool behavior is unverified, state that prominently after the
+copy-back block; do not promise VS Code Agent compatibility.
 The official VS Code Ollama extension recommends at least 65536 context tokens.
 If that will not fit, say explicitly that smaller-context agents are constrained;
 do not sacrifice OS/memory headroom or claim the machine meets that recommendation.

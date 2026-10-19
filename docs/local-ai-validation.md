@@ -77,6 +77,9 @@ For each platform, exercise these steps:
 2. Confirm model-storage volume selection, disk estimates and the allowlisted
    hardware report. Review missing memory fields before sharing with Gemini.
    Confirm the wizard makes no Gemini call.
+    Check that its prompt requires Gemini to put `MODEL`, `CONTEXT_TOKENS` and
+    `DOWNLOAD_GIB` first, ahead of analysis, and to distinguish actual structured
+    tool-call evidence from coding benchmarks or JSON returned as ordinary text.
 3. Pull a real local tool-capable model. Try a compatible single-file GGUF
    import with a space-containing path and an incompatible model. Confirm
    advertised tools **and** actual expected tool-call output are checked.

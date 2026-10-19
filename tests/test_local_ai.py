@@ -255,13 +255,17 @@ class WizardTests(unittest.TestCase):
 
     def test_hardware_prompt_allowlist_and_unknown_memory(self):
         self.env["FAIL_NVIDIA"] = "1"
+        self.env["USER"] = "DO-NOT-SHARE-USERNAME"
         result = self.run_shell("hardware_prompt", "\nn\n\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         prompt = self.prompt.read_text()
-        for forbidden in [str(self.home), str(self.repo), os.environ.get("USER", "root"), "not-used.invalid"]:
+        for forbidden in [str(self.home), str(self.repo), self.env["USER"], "not-used.invalid"]:
             self.assertNotIn(forbidden, prompt)
         self.assertIn("GPU memory: unknown", prompt)
         self.assertIn("TOOL CALLING", prompt)
+        self.assertRegex(prompt, r"(?m)^MODEL: .+\nCONTEXT_TOKENS: .+\nDOWNLOAD_GIB: ")
+        self.assertIn("before\nany greeting", prompt)
+        self.assertIn("structured Ollama API tool_calls", prompt)
         self.assertIn("nvidia-smi failed", result.stdout)
 
     def test_documents_location_respects_redirect_and_disabled_xdg(self):
