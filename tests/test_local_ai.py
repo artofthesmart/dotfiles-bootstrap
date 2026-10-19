@@ -183,8 +183,8 @@ class WizardTests(unittest.TestCase):
         self.assertEqual(chat["options"]["num_ctx"], 8192)
         self.assertIn("tool-call check passed", result.stdout)
         self.assertIn("https://ollama.com/library", result.stdout)
-        self.assertIn("You do not need to download it in the Ollama app", result.stdout)
-        self.assertIn("this wizard downloads it after you confirm", result.stdout)
+        self.assertIn("enter the exact model name and size tag", result.stdout)
+        self.assertIn("wizard checks/reuses those files", result.stdout)
         self.assertIn("PARAMETER num_ctx 8192", (self.base / "work/Modelfile").read_text())
 
     def test_gguf_import_with_spaces(self):
@@ -283,6 +283,11 @@ class WizardTests(unittest.TestCase):
         result = self.run_shell("detect_platform; hardware_prompt", "\nn\n\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("CPU-only", result.stdout)
+        self.assertEqual(self.run_shell('OS=Darwin; choose_model', 'q\n').returncode, 0)
+        desktop = self.run_shell('OS=Darwin; choose_model', 'q\n').stdout
+        self.assertIn("Click the model selector", desktop)
+        self.assertIn('Type "Say hello"', desktop)
+        self.assertIn("Return here and enter that same model name", desktop)
         self.assertIn("CPU only", self.prompt.read_text())
 
     def test_unsupported_os_arch_and_macos_version(self):

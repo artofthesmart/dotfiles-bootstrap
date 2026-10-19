@@ -244,8 +244,17 @@ choose_model() {
     local source size needed available gguf import_path context
     printf '\nChoose a small, tool-capable model from https://ollama.com/library to run on this computer.\n'
     printf 'Use the Gemini recommendation to check that it fits your memory and supports Agent tools.\n'
-    printf 'Copy its exact model name and size tag from the model page (the part after "ollama run").\n'
-    printf 'You do not need to download it in the Ollama app. Enter the name here; this wizard downloads it after you confirm.\n'
+    if [ "$OS" = Darwin ]; then
+        printf 'Download it in Ollama Desktop:\n'
+        printf '  1. Open Ollama from Applications.\n'
+        printf '  2. Click the model selector and type the exact name Gemini recommended, including any size tag like :32b.\n'
+        printf '     Example format: qwen2.5-coder:32b. Use YOUR recommended tool-capable model, not this example automatically.\n'
+        printf '  3. Select the matching LOCAL model and click its download icon if shown. Do not choose a cloud model.\n'
+        printf '  4. Type "Say hello" in the message box and press Enter. If needed, Ollama downloads the model before replying.\n'
+        printf '  5. Wait for the download and reply. Return here and enter that same model name.\n'
+    fi
+    printf 'To download through this wizard instead, enter the exact model name and size tag below.\n'
+    printf 'If already downloaded in Desktop, the wizard checks/reuses those files; it does not download an extra copy.\n'
     printf 'Choose local model weights, not a cloud model. The download may be several GB.\n'
     ask "Model source: 1 = Ollama Library (recommended), 2 = import a downloaded Hugging Face GGUF"
     source=$ANSWER

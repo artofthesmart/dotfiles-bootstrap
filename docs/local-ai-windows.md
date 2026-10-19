@@ -5,11 +5,9 @@ your computer, without per-request cloud-model charges. Model quality and speed 
 
 ## Start here
 
-The wizard supports **Windows x64, Windows 10 22H2 or newer**, with a desktop
-session, internet access for setup and space for the applications and model.
-Windows ARM devices are not automated by this wizard. NVIDIA/AMD acceleration
-depends on supported hardware and drivers; the script does not replace drivers.
-Models can require tens of gigabytes.
+Requires **Windows x64, Windows 10 22H2+**, a desktop session, internet for setup
+and storage. ARM is not automated. GPU acceleration requires supported drivers;
+the wizard does not replace drivers. Models can need tens of gigabytes.
 
 Download this repository using **Code > Download ZIP** on GitHub and extract
 it, or use an existing checkout. Open **PowerShell**, not Command Prompt, in
@@ -26,24 +24,26 @@ override managed controls.
 
 ## Follow the wizard
 
-1. **Install missing apps.** Existing VS Code and Ollama installations are reused,
+1. **Install missing apps.** Existing VS Code and Ollama installations are reused.
    Approve official user installers when needed; signatures are checked.
    VS Code must be 1.127 or newer.
    Downloads show the app name, MB/GB, percentage when available, and speed.
    Ollama includes GPU libraries: allow 4 GB installed, plus separate model space.
 2. **Ask Gemini what fits.** Review and paste the hardware-only prompt into
    Gemini yourself; nothing is sent automatically. It requests a tool-capable
-   local    model, exact Ollama name and link, storage size, context budget
+   local model, exact Ollama name and link, storage size, context budget
    and smaller fallback. The prompt is saved in **Documents/Local-AI-Gemini-Prompt.txt**.
    A recommendation is not a performance guarantee.
-3. **Choose and download locally.** Browse [Ollama's catalog](https://ollama.com/library)
-   for the small, tool-capable model Gemini recommended. Copy the name after
-   `ollama run`, including its size tag. Enter that name, storage estimate and
-   context budget here; the wizard downloads it. No manual model download is needed.
-   The wizard checks local inference and a harmless tool request without
-   executing that tool, then provides a `local-ai-...` model copy with your
-   context budget. Compatible Hugging Face GGUF files have a guided manual
-   download/import alternative.
+3. **Download in Ollama Desktop.** Open Ollama from Start. Click the model
+   selector and type Gemini's exact recommended name, including its size tag
+   (example format: `qwen2.5-coder:32b`, not a recommendation). Select the
+   matching **local**, not cloud, model. Click its download icon if shown.
+   Type **Say hello** in the message box and press Enter; Ollama downloads
+   the model if needed. Wait for a reply, then return to the wizard and enter
+   the same name, storage estimate and context budget.
+   Alternatively, enter the name directly in the wizard to download there.
+   Existing model files are reused. The wizard checks tools and creates a
+   `local-ai-...` context-budget copy.
 4. **Open your checkout.** Official Chat/Ollama extensions go into a separate
    **Local AI** profile. Follow the final UI steps: select **Agent**, choose
    your local Ollama model explicitly, and select local utility models in

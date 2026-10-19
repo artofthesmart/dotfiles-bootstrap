@@ -253,8 +253,15 @@ function Test-ModelName([string]$Name) {
 function Select-LocalModel {
     Write-Host "`nChoose a small, tool-capable model from https://ollama.com/library to run on this computer."
     Write-Host 'Use the Gemini recommendation to check that it fits your memory and supports Agent tools.'
-    Write-Host 'Copy its exact model name and size tag from the model page (the part after "ollama run").'
-    Write-Host 'You do not need to download it in the Ollama app. Enter the name here; this wizard downloads it after you confirm.'
+    Write-Host 'Download it in Ollama Desktop:'
+    Write-Host '  1. Open Ollama from the Start menu.'
+    Write-Host '  2. Click the model selector and type the exact name Gemini recommended, including any size tag like :32b.'
+    Write-Host '     Example format: qwen2.5-coder:32b. Use YOUR recommended tool-capable model, not this example automatically.'
+    Write-Host '  3. Select the matching LOCAL model and click its download icon if shown. Do not choose a cloud model.'
+    Write-Host '  4. In the message box, type "Say hello" and press Enter. If needed, Ollama downloads the model before replying.'
+    Write-Host '  5. Wait for the download to finish and a reply to appear. Return here and enter that same model name.'
+    Write-Host 'Prefer to stay here? Enter the model name below and the wizard can download it instead.'
+    Write-Host 'If already downloaded in Desktop, the wizard checks/reuses those files; it does not download an extra copy.'
     Write-Host 'Choose local model weights, not a cloud model. The download may be several GB.'
     $source = Read-Choice 'Model source: 1 = Ollama Library (recommended), 2 = import a downloaded Hugging Face GGUF'
     $gguf = $null

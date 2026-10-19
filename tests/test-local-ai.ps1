@@ -176,6 +176,9 @@ try {
         Assert-True ($source -match "'--profile', 'Local AI', '--install-extension', 'Ollama.ollama'") 'Ollama extension not profile-scoped'
         Assert-True ($source -match "'--new-window', '--profile', 'Local AI', \`$repo") 'Repository launch not profile-scoped'
         Assert-True ($source -notmatch 'Invoke-Expression|Set-ExecutionPolicy|AdapterRAM\s*=') 'Unexpected unsafe/global behavior'
+        Assert-True ($source.Contains('Click the model selector')) 'Missing Desktop model-selector instruction'
+        Assert-True ($source.Contains('type "Say hello" and press Enter')) 'Missing simple first prompt'
+        Assert-True ($source.Contains('Return here and enter that same model name')) 'Missing return-to-wizard instruction'
     }
     Test-Case 'Installer signature mismatch rejected' {
         function Get-AuthenticodeSignature { return [pscustomobject]@{ Status = 'Valid'; SignerCertificate = [pscustomobject]@{ Subject = 'Untrusted publisher' } } }
