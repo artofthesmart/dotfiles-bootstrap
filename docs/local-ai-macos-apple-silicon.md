@@ -24,15 +24,16 @@ bash ./scripts/setup-local-ai.sh
 1. **Install missing apps.** The wizard detects VS Code and Ollama, including
    apps not on your command search path. If missing, it downloads official
    installers after asking. Move the apps into Applications when prompted.
-   VS Code must be version 1.127 or newer. If needed, the wizard offers a small
-   private installation of the jq JSON utility; no Python or Homebrew is needed.
+   VS Code must be version 1.127 or newer. If needed, the wizard installs
+   checksum-verified jq privately; no Python or Homebrew is needed.
 2. **Choose a sensible model.** Review the displayed hardware-only prompt, then
    paste it into Gemini yourself. Nothing is sent automatically. The wizard
    first checks an exact-tag catalog and includes only entries with verified
    65K+ GGUF context metadata. Gemini must choose from that list or return
    `MODEL: NONE`; it still compares hardware fit and suggests a smaller fallback.
-3. **Verify and download.** Paste Gemini's exact listed model, size and `65536`
-   into the wizard. Out-of-catalog tags are rejected before download. It checks
+3. **Verify and download.** Paste only Gemini's exact listed model tag.
+   The wizard gets exact size, fixes context at `65536`, and checks
+   out-of-catalog tags before download. It checks
    free disk and shows a review. Already-installed models are
    reused without updating. The downloaded model also appears in Ollama.
    The wizard checks advertised tools and a harmless structured tool call.

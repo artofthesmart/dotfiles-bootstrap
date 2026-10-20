@@ -54,6 +54,9 @@ non-HTTPS redirect destinations, and preserves native stderr and exit codes for
 diagnosis. Bash covers translated Macs, Intel warnings, unsupported
 OS/architecture, old VS Code, failed elevation, existing apps outside PATH,
 repeated runs and preservation of default settings.
+It also verifies that context, exact model size, clipboard handling, model
+storage, private jq installation, Ollama startup and Local AI profile setup do
+not require redundant user answers.
 
 Validation performed during implementation: Bash syntax and mocked tests on
 Linux, and PowerShell parser/mocked tests using an isolated PowerShell 7 runtime
@@ -84,8 +87,8 @@ For each platform, exercise these steps:
    hardware report. Review missing memory fields before sharing with Gemini.
    Confirm the wizard makes no Gemini call.
    Confirm the prompt contains a freshly preflighted exact-tag catalog. Check
-   that Gemini is restricted to that list and instructed to put `MODEL`,
-   `DOWNLOAD_GIB`, then `CONTEXT_TOKENS: 65536` first, matching the wizard.
+   that Gemini is restricted to that list and instructed to put only `MODEL`
+   first. The wizard derives exact size and fixes context at 65536 itself.
    Context must fit hardware with model weights plus KV cache and OS headroom.
    Distinguish structured tool-call evidence from coding benchmarks or JSON prose.
 3. Preflight a compatible tag and a known 32K tag. Confirm exact registry layer
@@ -153,9 +156,9 @@ For each platform, exercise these steps:
   source from the first answer: a simple model name/tag uses the Ollama Library,
   while an `https://huggingface.co/...` URL starts the guided GGUF import. It no
   longer asks the user to classify the source manually.
-- **Context:** the wizard creates a `local-ai-...` model with `num_ctx`.
-  It defaults to 65536 and accepts 65536-1048576 tokens, not as a hardware
-  guarantee. The official extension recommends at least 65536 tokens; this
+- **Context:** the wizard creates a `local-ai-...` model with `num_ctx` fixed at
+  65536 rather than asking the user to repeat Gemini's value. This is not a
+  hardware guarantee. The official extension recommends at least 65536 tokens; this
   workflow treats that as its minimum requirement. Smaller input is rejected,
   not silently accepted with a warning. Larger context increases memory use.
   Ollama Library tags advertising a smaller supported limit are rejected before

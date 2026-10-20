@@ -184,19 +184,20 @@ try {
     }
     Test-Case 'Hardware prompt is allowlisted and unknown VRAM stays unknown' {
         $script:Questions.Clear()
-        Set-Answers @('n', '')
+        Set-Answers @()
         Write-HardwarePrompt
         $text = [IO.File]::ReadAllText((Get-PromptPath))
         Assert-True ((Get-PromptPath) -match 'Documents[/\\]Local-AI-Gemini-Prompt.txt$') 'Prompt is not in Documents'
         Assert-True ($text -match 'GPU memory: Unknown') 'Unknown VRAM not preserved'
         Assert-True ($text -notmatch 'DO-NOT-SHARE|AdapterRAM: 1') 'Hardware prompt leaked an excluded field'
         Assert-True ($text -match 'TOOL CALLING') 'No tool capability requirement'
-        Assert-True ($text -match '(?m)^MODEL: .+\r?\nDOWNLOAD_GIB: .+\r?\nCONTEXT_TOKENS: ') 'Missing ordered copy-back block'
+        Assert-True ($text -match '(?m)^MODEL: .+$') 'Missing MODEL copy-back line'
+        Assert-True ($text.Contains('only value the user must copy')) 'Prompt still asks for redundant values'
         Assert-True ($text -match 'before\r?\nany greeting') 'Copy-back block is not required first'
         Assert-True ($text.Contains('ONLY allowed Ollama Library recommendations')) 'Gemini is not restricted to the verified list'
         Assert-True ($text.Contains('llama3.1:8b') -and $text.Contains('mistral-nemo:12b')) 'Verified candidates missing from prompt'
         Assert-True ($text -notmatch 'qwen2\.5-coder') 'Known ineligible Qwen tag leaked into candidate prompt'
-        Assert-True ($text.Contains('CONTEXT_TOKENS: 65536 exactly')) 'Gemini can still choose a different requested context'
+        Assert-True ($text.Contains('fixes agent context at 65536 tokens')) 'Fixed context is not explained'
         Assert-True ($text.Contains('up to 50% of installed RAM (16 GiB)')) 'Missing RAM-derived iGPU planning ceiling'
         Assert-True ($text.Contains('NOT a fixed reservation')) 'Shared memory described as fixed'
         Assert-True ($text.Contains('Do not infer a BIOS carve-out')) 'Missing anti-inference memory rule'
@@ -208,7 +209,7 @@ try {
     }
     Test-Case 'Installed capacity is not confused with smaller Windows-visible memory' {
         $script:Mode = '96gb-installed'
-        Set-Answers @('n', '')
+        Set-Answers @()
         Write-HardwarePrompt
         $text = [IO.File]::ReadAllText((Get-PromptPath))
         Assert-True ($text.Contains('Installed physical RAM: 96 GiB')) 'Incorrect installed memory'
@@ -219,23 +220,37 @@ try {
         Assert-Throws { Write-HardwarePrompt } 'Installed RAM capacity could not be read'
         $script:Mode = 'ok'
     }
+    Test-Case 'Ollama start is automatic' {
+        $script:VersionAttempts = 0
+        $script:StartedOllama = $false
+        function Invoke-OllamaApi([string]$Endpoint, $Body = $null) {
+            $script:VersionAttempts++
+            if ($script:VersionAttempts -lt 3) { throw 'fixture unavailable' }
+            return [pscustomobject]@{ version = 'fixture' }
+        }
+        function Start-Process { $script:StartedOllama = $true }
+        function Start-Sleep {}
+        Wait-Ollama
+        Assert-True $script:StartedOllama 'Ollama was not started automatically'
+        Assert-True ($script:VersionAttempts -eq 3) 'Ollama readiness was not retried'
+    }
     Test-Case 'Model acquisition creates context-budget alias' {
         $script:Questions.Clear()
-        Set-Answers @('model:q4', '4', '65536', 'y')
+        Set-Answers @('model:q4', 'y')
         Select-LocalModel
         Assert-True ($script:LocalModel -eq 'local-ai-model-q4') 'Wrong alias'
         Assert-True ([IO.File]::ReadAllText((Join-Path $script:Work 'Modelfile')) -match 'num_ctx 65536') 'Missing context budget'
         Assert-True (@($script:Questions | Where-Object { $_ -match '^Model source:' }).Count -eq 0) 'Still asks the user to classify the source'
         $fields = @($script:Questions | Where-Object { $_ -match '^(MODEL|DOWNLOAD_GIB|CONTEXT_TOKENS):' } |
             ForEach-Object { ($_ -split ':')[0] })
-        Assert-True (($fields -join ',') -eq 'MODEL,DOWNLOAD_GIB,CONTEXT_TOKENS') 'Question order does not match Gemini copy-back order'
+        Assert-True (($fields -join ',') -eq 'MODEL') 'Wizard still asks for derivable model metadata'
     }
     Test-Case 'Compatible GGUF file path containing spaces' {
         $gguf = Join-Path $script:Fixture 'weights with spaces.gguf'
         [IO.File]::WriteAllText($gguf, 'GGUFfixture')
-        Set-Answers @('https://huggingface.co/example/tool-model', $gguf, 'imported', '4', '', 'y')
+        Set-Answers @('https://huggingface.co/example/tool-model', $gguf, 'y')
         Select-LocalModel
-        Assert-True ($script:LocalModel -eq 'local-ai-imported') 'Import alias missing'
+        Assert-True ($script:LocalModel -eq 'local-ai-imported-weights-with-spaces') 'Import alias was not derived from the file'
     }
     Test-Case 'Invalid GGUF rejected' {
         $gguf = Join-Path $script:Fixture 'bad.gguf'
@@ -248,49 +263,44 @@ try {
     Test-Case 'Low disk rejected before pull' {
         $script:Mode = 'low-disk'
         $script:Calls.Clear()
-        Set-Answers @('model', '4', '')
+        Set-Answers @('model')
         Assert-Throws { Select-LocalModel } 'Not enough'
         Assert-True (@($script:Calls | Where-Object { $_.Arguments[0] -eq 'pull' }).Count -eq 0) 'Downloaded despite low disk'
         $script:Mode = 'ok'
     }
-    Test-Case 'Invalid size/context rejected before pull' {
-        foreach ($answers in @(@('model', 'bad'), @('model', '1', '0'), @('model', '1', '9999999999'))) {
-            Set-Answers $answers
-            Assert-Throws { Select-LocalModel } 'numeric|integer'
-        }
+    Test-Case 'Derivable model metadata is never requested' {
+        $source = [IO.File]::ReadAllText($scriptPath)
+        Assert-True ($source -notmatch "Read-Choice 'DOWNLOAD_GIB:|Read-Choice 'CONTEXT_TOKENS:") 'Still asks for size or context'
+        Assert-True ($source -notmatch 'Copy the reviewed prompt to the clipboard|different model storage') 'Still asks for automatable clipboard or storage work'
     }
     Test-Case 'Required context and model limit enforced without misleading alias' {
         $script:Calls.Clear()
-        foreach ($context in @('8192', '32768', '65535')) {
-            Set-Answers @('model', '1', $context)
-            Assert-Throws { Select-LocalModel } 'at least 65536'
-        }
         Set-Answers @('NONE')
         Assert-Throws { Select-LocalModel } 'no suitable local model'
         Assert-True ($script:Calls.Count -eq 0) 'Invalid context triggered download'
         foreach ($mode in @('short-context', 'info-context')) {
             $script:Mode = $mode
-            Set-Answers @('model', '1', '', 'y')
+            Set-Answers @('model')
             Assert-Throws { Select-LocalModel } '32768 context tokens'
         }
         Assert-True (@($script:Calls | Where-Object { $_.Arguments[0] -eq 'pull' }).Count -eq 0) 'Downloaded a known 32K model'
         Assert-True (@($script:Calls | Where-Object { $_.Arguments[0] -eq 'create' }).Count -eq 0) 'Created unsupported context alias'
         $script:Mode = 'unknown-context'
-        Set-Answers @('model', '1', '', 'y')
+        Set-Answers @('model', 'y')
         Select-LocalModel
         Assert-True ($script:Context -eq 65536) 'Default context is not 65536'
         $script:Mode = 'ok'
     }
     Test-Case 'Out-of-catalog Gemini recommendation is rejected before pull' {
         $script:Calls.Clear()
-        Set-Answers @('qwen2.5-coder:14b', '9', '', 'y')
+        Set-Answers @('qwen2.5-coder:14b')
         Assert-Throws { Select-LocalModel } 'not in the wizard-verified candidate list'
         Assert-True (@($script:Calls | Where-Object { $_.Arguments[0] -eq 'pull' }).Count -eq 0) 'Pulled an out-of-catalog recommendation'
     }
     Test-Case 'Installed exact model is reused without pull' {
         $script:InstalledModel = 'model:q4'
         $script:Calls.Clear()
-        Set-Answers @('model:q4', '4', '', 'y')
+        Set-Answers @('model:q4', 'y')
         Select-LocalModel
         Assert-True (@($script:Calls | Where-Object { $_.Arguments[0] -eq 'pull' }).Count -eq 0) 'Installed model was pulled again'
         Assert-True (@($script:Calls | Where-Object { $_.Arguments[0] -eq 'create' }).Count -eq 1) 'Local context alias was not created'
@@ -299,14 +309,14 @@ try {
     Test-Case 'Remote and non-tool models rejected' {
         foreach ($mode in @('remote', 'no-tools')) {
             $script:Mode = $mode
-            Set-Answers @('model', '1', '', 'y')
+            Set-Answers @('model', 'y')
             Assert-Throws { Select-LocalModel } 'cloud inference|tool calling'
         }
         $script:Mode = 'ok'
     }
     Test-Case 'Failed model download surfaces' {
         $script:Mode = 'pull-fails'
-        Set-Answers @('model', '1', '', 'y')
+        Set-Answers @('model', 'y')
         Assert-Throws { Select-LocalModel } 'Download failed'
         $script:Mode = 'ok'
     }
@@ -391,7 +401,7 @@ $global:LASTEXITCODE = 0
         foreach ($run in @(1, 2)) {
             Install-Applications
             Wait-Ollama
-            Set-Answers @('n', '', 'model:q4', '4', '65536', 'y', 'y')
+            Set-Answers @('model:q4', 'y')
             Write-HardwarePrompt
             Select-LocalModel
             Test-LocalModel

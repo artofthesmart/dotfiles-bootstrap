@@ -121,7 +121,7 @@ ensure_jq() {
             Darwin-amd64) asset=jq-macos-amd64; hash=e94b266e3c26690550006abe63152b782280f4e14374accdf04cbde844f00bc0 ;;
             Darwin-arm64) asset=jq-macos-arm64; hash=2d75340ba57a4b4b4c8708a21c2dc8e958a48aaa8bba13b27f77f6e4c0eca07e ;;
         esac
-        confirm "Download jq 1.8.2, a small JSON reader, only into $STATE/bin (no global install)" || fail "A JSON reader is required."
+        printf 'Installing checksum-verified jq 1.8.2 privately in %s/bin (no global install).\n' "$STATE"
         download "https://github.com/jqlang/jq/releases/download/jq-1.8.2/$asset" "$WORK/jq"
         if [ "$OS" = Darwin ]; then actual=$(shasum -a 256 "$WORK/jq"); else actual=$(sha256sum "$WORK/jq"); fi
         [ "${actual%% *}" = "$hash" ] || fail "jq checksum mismatch; refusing to execute it."
@@ -140,14 +140,25 @@ api() {
 }
 ensure_server() {
     if ! api version > "$WORK/version.json" 2>/dev/null; then
+        printf 'Ollama is not responding at 127.0.0.1:11434. Starting it automatically...\n'
         if [ "$OS" = Darwin ]; then
-            printf 'Open Ollama from Applications and approve its first-run prompts.\n'
-            open -a Ollama
+            open -a Ollama || fail "Ollama could not be opened automatically."
         else
-            printf 'Start Ollama in another terminal with: ollama serve\nIf installed as a service, use: sudo systemctl start ollama\n'
+            if command -v systemctl >/dev/null && systemctl list-unit-files ollama.service --no-legend 2>/dev/null | grep -q '^ollama\.service'; then
+                sudo systemctl start ollama || fail "The Ollama service could not be started."
+            elif command -v setsid >/dev/null; then
+                setsid "$OLLAMA" serve > "$STATE/ollama-serve.log" 2>&1 < /dev/null &
+            else
+                "$OLLAMA" serve > "$STATE/ollama-serve.log" 2>&1 < /dev/null &
+            fi
         fi
-        ask "When Ollama is running, press Enter"
-        api version > "$WORK/version.json" || fail "Ollama did not respond at 127.0.0.1:11434. Start it and rerun."
+        attempt=0
+        while [ "$attempt" -lt 30 ]; do
+            if api version > "$WORK/version.json" 2>/dev/null; then break; fi
+            attempt=$((attempt + 1))
+            sleep 1
+        done
+        [ "$attempt" -lt 30 ] || fail "Ollama did not respond after an automatic start attempt. Open Ollama and rerun setup."
     fi
     "$JQ" -e '.version | strings | length > 0' "$WORK/version.json" >/dev/null || fail "Invalid Ollama server response."
 }
@@ -197,13 +208,6 @@ hardware_prompt() {
         fi
     fi
     printf '\nGPU information: %s\n' "$gpu"
-    if [ "$OS" = Linux ] && [ "$vram" = unknown ]; then
-        ask "Optional DEDICATED GPU VRAM in GiB from its specification (Enter if unknown; do not enter integrated/shared RAM)"
-        if [ -n "$ANSWER" ]; then
-            [[ "$ANSWER" =~ ^[0-9]+([.][0-9]+)?$ ]] || fail "Dedicated GPU VRAM must be a number in GiB."
-            vram="$ANSWER GiB dedicated VRAM (user supplied; not automatically verified)"
-        fi
-    fi
     free_gib=$(free_kib | awk '{printf "%.1f", $1/1048576}')
     build_verified_candidate_catalog
     {
@@ -218,25 +222,22 @@ These are the ONLY allowed Ollama Library recommendations for this run. The
 wizard read each exact tag's registry layers and GGUF context metadata directly.
 Choose MODEL exactly as written from this list, or use MODEL: NONE. Do not output
 another tag, alias, quantization, family member or Hugging Face model in the
-copy-back block. Repeat that candidate's DOWNLOAD_GIB value. Output
-CONTEXT_TOKENS: 65536 exactly; the verified context is the supported ceiling,
-not the requested allocation. Tool use is still unverified until the wizard's
-post-download local metadata and structured tool-call checks pass.
+copy-back line. Candidate size and verified context are metadata for your
+analysis; the wizard already has them. Tool use is still unverified until the
+wizard's post-download local metadata and structured tool-call checks pass.
 
 TOOL CALLING STATUS:
 The shortlist is limited to models currently presented as tool-capable by
 Ollama, but that label is not proof. Do not claim success; the wizard must see
 an actual structured Ollama API tool_calls response from the downloaded exact tag.
 
-REQUIRED RESPONSE FORMAT: Start your response with this copy-back block, before
-any greeting, explanation, heading, or analysis. Replace placeholders with values:
+REQUIRED RESPONSE FORMAT: Start your response with this copy-back line, before
+any greeting, explanation, heading, or analysis:
 MODEL: <exact local Ollama name:tag; no command, URL, backticks, or cloud model>
-DOWNLOAD_GIB: <numeric additional storage estimate in GiB; no units>
-CONTEXT_TOKENS: <integer tokens, at least 65536; no commas or 64k shorthand>
-These are the values the user must copy into the setup wizard. Put MODEL first
-then DOWNLOAD_GIB, then CONTEXT_TOKENS, matching its question order exactly.
-Put ALL analysis, links, caveats and fallback choices
-AFTER this block. Do not invent a runnable recommendation if none is suitable:
+This is the only value the user must copy into the setup wizard. The wizard
+already knows the exact registry size and fixes agent context at 65536 tokens.
+Put ALL analysis, links, caveats and fallback choices AFTER this line.
+Do not invent a runnable recommendation if none is suitable:
 use MODEL: NONE and explain the blocker afterward.
 
 Compare ONLY the verified candidates above and explain which best fits this
@@ -255,8 +256,7 @@ hardware with OS/VS Code memory headroom. A small download alone is not enough.
 Do not recommend a 32768-context model and simply set num_ctx to 65536; setting
 a larger number does not establish model support. Verify any extended-context
 requirements against the exact model variant. Do not lower context to make it fit.
-If no suitable model fits, use MODEL: NONE, DOWNLOAD_GIB: N/A,
-CONTEXT_TOKENS: N/A in the first block and explain the hardware/support blocker.
+If no suitable model fits, use MODEL: NONE and explain the hardware/support blocker.
 Prefer https://ollama.com/library models. If none fit, give an exact supported
 GGUF file and source page on https://huggingface.co, including architecture and
 chat-template/tool support caveats. Do not suggest executing repository code.
@@ -266,13 +266,10 @@ PROMPT
     printf '\nReview this hardware-only prompt before sharing it with Gemini:\n\n'
     cat "$prompt_file"
     printf '\nSaved to %s\n' "$prompt_file"
-    if confirm "Copy the reviewed prompt to the clipboard"; then
-        if command -v pbcopy >/dev/null; then pbcopy < "$prompt_file"
-        elif command -v wl-copy >/dev/null; then wl-copy < "$prompt_file"
-        elif command -v xclip >/dev/null; then xclip -selection clipboard < "$prompt_file"
-        else printf 'No clipboard utility available. Copy the displayed text instead.\n'; fi
-    fi
-    ask "Paste it into Gemini yourself; return here with a model tag, size, and context recommendation, then press Enter"
+    if command -v pbcopy >/dev/null; then pbcopy < "$prompt_file"; printf 'Copied the prompt to the clipboard.\n'
+    elif command -v wl-copy >/dev/null; then wl-copy < "$prompt_file"; printf 'Copied the prompt to the clipboard.\n'
+    elif command -v xclip >/dev/null; then xclip -selection clipboard < "$prompt_file"; printf 'Copied the prompt to the clipboard.\n'
+    else printf 'No clipboard utility available. Use the displayed or saved copy.\n'; fi
 }
 valid_model() {
     [[ "$1" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*(:[a-zA-Z0-9][a-zA-Z0-9._-]*)?$ ]] &&
@@ -383,7 +380,7 @@ validate_local_model_metadata() {
         fail "Model does not advertise tools. Choose a tool-capable model; do not force-enable unsupported tools."
 }
 choose_model() {
-    local source selection size needed available gguf import_path context installed=false gguf_limit=0 exact_gib free_gib gguf_bytes
+    local source selection needed available gguf import_path installed=false gguf_limit=0 exact_gib free_gib gguf_bytes base_name safe_name
     printf '\nPaste Gemini'\''s exact Ollama model tag or Hugging Face URL.\n'
     printf 'Gemini is advisory. Before downloading, this wizard checks the exact tag, registry size, and GGUF context metadata.\n'
     printf 'Already-installed models are checked and reused without pulling them again.\n'
@@ -418,20 +415,14 @@ choose_model() {
         [[ "$gguf" != *$'\n'* && "$gguf" != *$'\r'* ]] || fail "Newlines in paths are unsupported."
         [ "$(head -c 4 "$gguf")" = GGUF ] || fail "The file is not a GGUF."
         import_path=$(printf '%s' "$gguf" | sed 's/\\/\\\\/g; s/"/\\"/g')
-        ask "Local name for this import (use a new name to preserve previous models)"
-        MODEL=$ANSWER
+        base_name=$(basename "$gguf" .gguf | tr '[:upper:]' '[:lower:]')
+        safe_name=$(printf '%s' "$base_name" | sed 's/[^a-z0-9._-][^a-z0-9._-]*/-/g; s/^-*//; s/-*$//')
+        [ -n "$safe_name" ] || safe_name=model
+        MODEL="imported-$safe_name"
+        printf 'Import name: %s\n' "$MODEL"
         valid_model "$MODEL" || fail "Invalid local model name or cloud tag."
     fi
-    ask "DOWNLOAD_GIB: paste Gemini's estimate (number only; Enter if unknown; verified registry/file size overrides it)"
-    size=$ANSWER
-    if [ -n "$size" ]; then
-        [[ "$size" =~ ^[0-9]+([.][0-9]+)?$ ]] || fail "Model size must be numeric GiB."
-    fi
-    ask "CONTEXT_TOKENS: paste the context from Gemini (minimum 65536; Enter for 65536)"
-    context=${ANSWER:-65536}
-    [[ "$context" =~ ^[0-9]+$ ]] && [ "${#context}" -le 7 ] && [ "$context" -ge 65536 ] && [ "$context" -le 1048576 ] ||
-        fail "Choose an integer context size from 65536 to 1048576. Ask Gemini for a compatible model rather than reducing context."
-    CONTEXT=$((10#$context))
+    CONTEXT=65536
     LOCAL_MODEL="local-ai-${MODEL//:/-}"
     if [ "$source" = 1 ]; then
         verified_candidate_info "$MODEL"
@@ -458,9 +449,6 @@ choose_model() {
             printf '  Requested agent context: %s tokens\n  Free model-volume space: %s GiB\n' "$CONTEXT" "$free_gib"
             printf '  VS Code alias: %s (created/recreated after confirmation)\n' "$LOCAL_MODEL"
             printf '  Tools: not trusted yet; checked from local metadata and a live tool call after download\n'
-            if [ -n "$size" ] && awk -v a="$size" -v b="$exact_gib" 'BEGIN {d=a-b; if(d<0)d=-d; exit !(d>0.5)}'; then
-                printf 'WARNING: Gemini estimated %s GiB; exact registry layers total %s GiB. The registry value is used.\n' "$size" "$exact_gib"
-            fi
         fi
     else
         head -c 1048576 "$gguf" > "$WORK/import-prefix.gguf"
@@ -529,7 +517,7 @@ wait_for_code_profile() {
 connect_code() {
     printf '\nGitHub Copilot Chat is bundled with this supported VS Code version.\n'
     printf 'Installing the official Ollama extension only for the Local AI profile.\n'
-    confirm "Create/reuse Local AI and install Ollama.ollama" || fail "Profile setup cancelled."
+    printf 'Creating/reusing Local AI and installing Ollama.ollama for that profile.\n'
     "$CODE" --new-window --profile "Local AI" ||
         fail "VS Code could not open the Local AI profile."
     wait_for_code_profile
@@ -593,12 +581,7 @@ main() {
     if [ "$OS" = Linux ] && [ -z "${OLLAMA_MODELS:-}" ] && [ -d /usr/share/ollama ]; then
         MODEL_VOLUME=/usr/share/ollama
     fi
-    printf '\nModel storage default: %s\n' "$MODEL_VOLUME"
-    ask "If your running Ollama server uses different model storage, enter its absolute directory (Enter to keep default)"
-    if [ -n "$ANSWER" ]; then
-        [[ "$ANSWER" = /* ]] && [ -d "$ANSWER" ] || fail "Choose an existing absolute model-storage directory."
-        MODEL_VOLUME=$ANSWER
-    fi
+    printf '\nDetected model storage: %s\n' "$MODEL_VOLUME"
     while [ ! -d "$MODEL_VOLUME" ]; do MODEL_VOLUME=$(dirname "$MODEL_VOLUME"); done
     hardware_prompt
     choose_model

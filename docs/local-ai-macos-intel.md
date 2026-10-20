@@ -25,7 +25,7 @@ bash ./scripts/setup-local-ai.sh
 1. **Check/install VS Code and Ollama.** Existing apps are reused even if their
    commands are missing from your search path. Approve official downloads only
    when needed and move apps into Applications. Use VS Code
-   1.127 or newer. A small jq JSON utility may be offered in a private folder;
+   1.127 or newer. Checksum-verified jq is installed privately if needed;
    Python and Homebrew are not prerequisites.
 2. **Ask Gemini what fits.** Review the hardware-only prompt before copying it
    into Gemini yourself. It contains CPU, RAM, GPU limitations and available
@@ -34,8 +34,9 @@ bash ./scripts/setup-local-ai.sh
    `MODEL: NONE`. It compares CPU-only fit, a smaller fallback and license caveats.
    No information is sent automatically; Gemini's recommendation is not proof
    that a model will be fast or useful.
-3. **Verify and download.** Paste Gemini's exact listed model, size and `65536`
-   into the wizard. Out-of-catalog tags are rejected before download. The wizard
+3. **Verify and download.** Paste only Gemini's exact listed model tag. The
+   wizard gets the exact size itself, fixes context at `65536`, and rejects
+   out-of-catalog tags before download. It
    checks free disk and shows a review. Installed models are reused without updating;
    new downloads also appear in Ollama. The wizard then checks advertised tools
    and a harmless structured tool call. CPU-only performance may still be poor.

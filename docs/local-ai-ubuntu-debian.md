@@ -28,19 +28,19 @@ bash ./scripts/setup-local-ai.sh
    APT; it may offer Microsoft's update repository. Approve the official Ollama
    installer separately; it can use `sudo` and create a system service. The
    script does not upgrade the whole computer. VS Code must be 1.127 or newer.
-   A small jq JSON utility, if missing, is installed privately without Python.
+   Checksum-verified jq is installed privately if missing.
 2. **Ask Gemini what fits.** Review the hardware-only prompt and paste it into
    Gemini yourself. It includes RAM, CPU, GPU/known graphics memory and free
    model-storage space, not repository data. Nothing is sent automatically.
    The wizard first verifies a small exact-tag catalog with 65K+ GGUF context;
-   Gemini must choose from that list or return `MODEL: NONE`. Supply missing
-   dedicated GPU memory from specifications if available.
-3. **Get and check the model.** Enter the exact listed tag, size and `65536`.
-   The wizard rejects out-of-catalog recommendations before a large pull, checks
-   free disk, and shows a final review. Installed models are reused without updating.
+   Gemini must choose from that list or return `MODEL: NONE`.
+3. **Get and check the model.** Enter only the exact listed tag. The wizard gets
+   the exact size itself, fixes context at `65536`, rejects out-of-catalog
+   recommendations before a large pull, checks free disk, and shows a final
+   review. Installed models are reused without updating.
    It creates a `local-ai-...` context-budget model and checks a harmless
    structured tool call. Compatible manually downloaded GGUF files have a
-   guided import alternative. Start Ollama when prompted if needed.
+   guided import alternative. It starts Ollama if needed.
 4. **Open or clone a repository.** The wizard configures a separate **Local AI**
    profile with bundled Copilot Chat and the official Ollama extension.
    Follow the final UI steps: choose **Agent**,

@@ -35,9 +35,9 @@ override managed controls.
    verified 65K+ GGUF context metadata. Gemini must choose one of those exact
    entries or return `MODEL: NONE`; it no longer decides whether a tag is eligible.
    The prompt is saved in **Documents/Local-AI-Gemini-Prompt.txt**.
-3. **Let the wizard verify and download it.** Paste Gemini's three top lines in
-   order: exact model tag, listed size and `65536`. The wizard rejects anything
-   outside the verified catalog, checks free disk, and shows a review.
+3. **Let the wizard verify and download it.** Paste only Gemini's exact model
+   tag. The wizard gets the exact size itself, fixes context at `65536`, rejects
+   anything outside the verified catalog, checks free disk, and shows a review.
    Installed models are reused without updating.
    After download, the model appears in Ollama Desktop automatically. The wizard
    then checks advertised tools, runs a harmless structured tool-call test, and

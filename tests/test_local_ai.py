@@ -228,7 +228,7 @@ class WizardTests(unittest.TestCase):
         self.assertEqual(self.calls("ollama"), [])
 
     def test_model_acquisition_and_actual_tool_call(self):
-        result = self.run_shell("choose_model; check_model", "model:q4\n4\n65536\ny\n")
+        result = self.run_shell("choose_model; check_model", "model:q4\ny\n")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn(["ollama", "pull", "model:q4"], self.calls("ollama"))
         chat = next(body for path, body in self.server.requests if path == "/api/chat")
@@ -240,15 +240,15 @@ class WizardTests(unittest.TestCase):
         self.assertIn("GGUF context limit: 131072", result.stdout)
         self.assertNotIn("Model source:", result.stdout)
         self.assertIn("PARAMETER num_ctx 65536", (self.base / "work/Modelfile").read_text())
-        positions = [result.stdout.index(label + ":") for label in ("MODEL", "DOWNLOAD_GIB", "CONTEXT_TOKENS")]
-        self.assertEqual(positions, sorted(positions))
+        self.assertNotIn("DOWNLOAD_GIB: paste", result.stdout)
+        self.assertNotIn("CONTEXT_TOKENS: paste", result.stdout)
 
     def test_gguf_import_with_spaces(self):
         gguf = self.base / "weights with spaces.gguf"
         gguf.write_bytes(b"GGUFfixture")
-        result = self.run_shell("choose_model", f"https://huggingface.co/example/tool-model\n{gguf}\nimported\n4\n\ny\n")
+        result = self.run_shell("choose_model", f"https://huggingface.co/example/tool-model\n{gguf}\ny\n")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(self.calls("ollama")[0][1:3], ["create", "imported"])
+        self.assertEqual(self.calls("ollama")[0][1:3], ["create", "imported-weights-with-spaces"])
         self.assertNotIn("pull", [row[1] for row in self.calls("ollama")])
 
     def test_invalid_gguf_rejected(self):
@@ -264,7 +264,7 @@ class WizardTests(unittest.TestCase):
 
     def test_low_disk_rejected_before_download(self):
         self.env["FREE_KIB"] = "1048576"
-        result = self.run_shell("choose_model", "model\n4\n\n")
+        result = self.run_shell("choose_model", "model\n")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Not enough", result.stderr)
         self.assertFalse(any(row[1] == "pull" for row in self.calls("ollama")))
@@ -275,25 +275,18 @@ class WizardTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0 if answers else 1)
         self.assertEqual(self.calls("ollama"), [])
 
-    def test_context_and_size_validation(self):
-        for answers in ["model\nbad\n", "model\n1\n999999999999999999999\n", "model\n1\n0\n"]:
-            result = self.run_shell("choose_model", answers)
-            self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(self.calls("ollama"), [])
-        result = self.run_shell("choose_model; check_model", "model\n1\n0065536\ny\n")
+    def test_context_is_fixed_without_redundant_questions(self):
+        result = self.run_shell("choose_model; check_model", "model\ny\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         chat = next(body for path, body in self.server.requests if path == "/api/chat")
         self.assertEqual(chat["options"]["num_ctx"], 65536)
+        self.assertNotIn("DOWNLOAD_GIB: paste", result.stdout)
+        self.assertNotIn("CONTEXT_TOKENS: paste", result.stdout)
 
     def test_context_minimum_and_model_supported_limit(self):
-        for context in ("8192", "32768", "65535"):
-            result = self.run_shell("choose_model", f"model\n1\n{context}\n")
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("65536", result.stderr)
-        self.assertEqual(self.calls("ollama"), [])
         for mode in ("short-context", "info-context"):
             self.env["REGISTRY_CONTEXT"] = "32768"
-            result = self.run_shell("choose_model", "model\n1\n\ny\n")
+            result = self.run_shell("choose_model", "model\n")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("32768", result.stderr)
             self.assertFalse(any(row[1] == "pull" for row in self.calls("ollama")))
@@ -301,7 +294,7 @@ class WizardTests(unittest.TestCase):
             self.env.pop("REGISTRY_CONTEXT")
             self.server.mode = mode
         self.server.mode = "unknown-context"
-        result = self.run_shell("choose_model", "model\n1\n\ny\n")
+        result = self.run_shell("choose_model", "model\ny\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("did not report a supported context limit", result.stdout)
 
@@ -319,14 +312,14 @@ class WizardTests(unittest.TestCase):
         self.assertFalse(any(row[1] == "pull" for row in self.calls("ollama")))
 
     def test_out_of_catalog_gemini_recommendation_stops_before_pull(self):
-        result = self.run_shell("choose_model", "qwen2.5-coder:14b\n9\n\n")
+        result = self.run_shell("choose_model", "qwen2.5-coder:14b\n")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("not in the wizard-verified candidate list", result.stderr)
         self.assertFalse(any(row[1] == "pull" for row in self.calls("ollama")))
 
     def test_installed_exact_model_is_reused_without_pull(self):
         self.env["INSTALLED_MODEL"] = "model:q4"
-        result = self.run_shell("choose_model", "model:q4\n4\n\ny\n")
+        result = self.run_shell("choose_model", "model:q4\ny\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("already-installed model", result.stdout)
         self.assertFalse(any(row[1] == "pull" for row in self.calls("ollama")))
@@ -336,7 +329,7 @@ class WizardTests(unittest.TestCase):
         for mode, message in [("remote", "cloud inference"), ("no-tools", "advertise tools")]:
             with self.subTest(mode=mode):
                 self.server.mode = mode
-                result = self.run_shell("choose_model", "model\n1\n\ny\n")
+                result = self.run_shell("choose_model", "model\ny\n")
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(message, result.stderr)
 
@@ -354,7 +347,7 @@ class WizardTests(unittest.TestCase):
 
     def test_pull_failure_stops_before_profile_creation(self):
         self.env["FAIL_OLLAMA"] = "pull"
-        result = self.run_shell("choose_model; connect_code", "model\n1\n\ny\n")
+        result = self.run_shell("choose_model; connect_code", "model\ny\n")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Download failed", result.stderr)
         self.assertEqual(self.calls("code"), [])
@@ -362,14 +355,15 @@ class WizardTests(unittest.TestCase):
     def test_hardware_prompt_allowlist_and_unknown_memory(self):
         self.env["FAIL_NVIDIA"] = "1"
         self.env["USER"] = "DO-NOT-SHARE-USERNAME"
-        result = self.run_shell("hardware_prompt", "\nn\n\n")
+        result = self.run_shell("hardware_prompt")
         self.assertEqual(result.returncode, 0, result.stderr)
         prompt = self.prompt.read_text()
         for forbidden in [str(self.home), self.env["USER"], "not-used.invalid"]:
             self.assertNotIn(forbidden, prompt)
         self.assertIn("GPU memory: unknown", prompt)
         self.assertIn("TOOL CALLING", prompt)
-        self.assertRegex(prompt, r"(?m)^MODEL: .+\nDOWNLOAD_GIB: .+\nCONTEXT_TOKENS: ")
+        self.assertRegex(prompt, r"(?m)^MODEL: .+$")
+        self.assertIn("only value the user must copy", prompt)
         self.assertIn("before\nany greeting", prompt)
         self.assertIn("structured Ollama API tool_calls", prompt)
         self.assertIn("MANDATORY FOR THIS SETUP", prompt)
@@ -377,8 +371,9 @@ class WizardTests(unittest.TestCase):
         self.assertIn("ONLY allowed Ollama Library recommendations", prompt)
         self.assertIn("llama3.1:8b", prompt)
         self.assertNotIn("qwen2.5-coder", prompt)
-        self.assertIn("CONTEXT_TOKENS: 65536 exactly", prompt)
+        self.assertIn("fixes agent context at 65536 tokens", prompt)
         self.assertIn("nvidia-smi failed", result.stdout)
+        self.assertNotIn("Optional DEDICATED GPU VRAM", result.stdout)
 
     def test_documents_location_respects_redirect_and_disabled_xdg(self):
         redirected = self.home / "My Documents"
@@ -396,7 +391,7 @@ class WizardTests(unittest.TestCase):
         result = self.run_shell('detect_platform; printf "%s" "$ARCH"')
         self.assertEqual(result.stdout, "arm64")
         self.env["APPLE_SILICON"] = "0"
-        result = self.run_shell("detect_platform; hardware_prompt", "n\n\n")
+        result = self.run_shell("detect_platform; hardware_prompt")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("CPU-only", result.stdout)
         self.assertEqual(self.run_shell('OS=Darwin; choose_model', 'q\n').returncode, 0)
@@ -468,16 +463,23 @@ class WizardTests(unittest.TestCase):
     def test_missing_json_helper_checksum_and_download_failure(self):
         # Force only the dependency lookup to fail; do not hide host utilities.
         lookup = 'command() { if [ "$*" = "-v jq" ]; then return 1; else builtin command "$@"; fi; }; '
-        result = self.run_shell(lookup + 'ensure_jq', "n\n")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("JSON reader is required", result.stderr)
-        result = self.run_shell(lookup + 'download() { printf bad > "$2"; }; ensure_jq', "y\n")
+        result = self.run_shell(lookup + 'download() { printf bad > "$2"; }; ensure_jq')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("checksum mismatch", result.stderr)
         self.assertFalse((self.state / "bin/jq").exists())
         result = self.run_shell('find_code() { CODE=; }; download() { return 22; }; ensure_code', "y\n")
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.calls("code"), [])
+
+    def test_ollama_start_and_private_jq_are_automatic(self):
+        result = self.run_shell(
+            'api_calls=0; api() { api_calls=$((api_calls + 1)); '
+            '[ "$api_calls" -gt 1 ] && printf \'{"version":"fixture"}\'; }; '
+            'OS=Darwin; open() { :; }; ensure_server')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        source = SCRIPT.read_text()
+        self.assertNotIn('ask "When Ollama is running', source)
+        self.assertNotIn('confirm "Download jq', source)
 
     def test_https_downloads_restrict_redirect_protocols(self):
         source = SCRIPT.read_text()
@@ -516,7 +518,7 @@ class WizardTests(unittest.TestCase):
         self.assertTrue(launches and installs and launches[0] < installs[0])
 
     def test_full_interactive_flow_with_fake_api(self):
-        answers = "\nn\n\nllama3.1:8b\n5\n65536\ny\ny\n"
+        answers = "llama3.1:8b\ny\n"
         master, slave = pty.openpty()
         # Platform detection has its own tests; no host-specific install paths.
         command = self.source + 'detect_platform() { OS=Linux; ARCH=amd64; OS_VERSION=fixture; }; main'
