@@ -95,11 +95,18 @@ function Get-ModelVolume {
     $space = if ($script:Mode -eq 'low-disk') { 1GB } else { 100GB }
     return [pscustomobject]@{ AvailableFreeSpace = $space }
 }
-function Get-CimInstance([string]$ClassName) {
+function Get-CimInstance([string]$ClassName, [string[]]$Property) {
     switch ($ClassName) {
         'Win32_OperatingSystem' { return [pscustomobject]@{ Caption = 'Fixture Windows'; Version = '10.0.22631'; CSName = 'DO-NOT-SHARE-HOST' } }
         'Win32_Processor' { return [pscustomobject]@{ Name = 'Fixture CPU'; ProcessorId = 'DO-NOT-SHARE-SERIAL' } }
         'Win32_ComputerSystem' { return [pscustomobject]@{ TotalPhysicalMemory = 32GB; UserName = 'DO-NOT-SHARE-USER' } }
+        'Win32_PhysicalMemory' {
+            if ($script:Mode -eq 'missing-installed-ram') { return @() }
+            if ($script:Mode -eq '96gb-installed') {
+                return @([pscustomobject]@{ Capacity = 48GB }, [pscustomobject]@{ Capacity = 48GB })
+            }
+            return [pscustomobject]@{ Capacity = 32GB }
+        }
         'Win32_VideoController' { return [pscustomobject]@{ Name = 'Fixture GPU'; AdapterRAM = 1 } }
     }
 }
@@ -128,13 +135,26 @@ try {
         Assert-True ($text -match '(?m)^MODEL: .+\r?\nDOWNLOAD_GIB: .+\r?\nCONTEXT_TOKENS: ') 'Missing ordered copy-back block'
         Assert-True ($text -match 'before\r?\nany greeting') 'Copy-back block is not required first'
         Assert-True ($text -match 'structured Ollama API tool_calls') 'Missing structured tool-call evidence requirement'
-        Assert-True ($text.Contains('up to 50% of system RAM (16 GiB)')) 'Missing RAM-derived iGPU planning ceiling'
+        Assert-True ($text.Contains('up to 50% of installed RAM (16 GiB)')) 'Missing RAM-derived iGPU planning ceiling'
         Assert-True ($text.Contains('NOT a fixed reservation')) 'Shared memory described as fixed'
         Assert-True ($text.Contains('Do not infer a BIOS carve-out')) 'Missing anti-inference memory rule'
         Assert-True ($text.Contains('Do not claim exact remaining/free RAM')) 'Missing free-memory uncertainty'
         Assert-True (@($script:Questions | Where-Object { $_ -match 'Optional GPU memory' }).Count -eq 0) 'Still asks for ambiguous shared VRAM'
         Assert-True ($text.Contains('MANDATORY FOR THIS SETUP')) 'Missing required context emphasis'
         Assert-True ($text.Contains('Do not lower context to make it fit')) 'Prompt permits lowering required context'
+    }
+    Test-Case 'Installed capacity is not confused with smaller Windows-visible memory' {
+        $script:Mode = '96gb-installed'
+        Set-Answers @('n', '')
+        Write-HardwarePrompt
+        $text = [IO.File]::ReadAllText((Get-PromptPath))
+        Assert-True ($text.Contains('Installed physical RAM: 96 GiB')) 'Incorrect installed memory'
+        Assert-True ($text.Contains('Windows-visible physical RAM: 32 GiB')) 'Visible memory not separately labelled'
+        Assert-True ($text.Contains('up to 50% of installed RAM (48 GiB)')) 'Wrong installed-memory planning ceiling'
+        Assert-True ($text.Contains('the cause is unknown here')) 'Memory discrepancy treated as known reservation'
+        $script:Mode = 'missing-installed-ram'
+        Assert-Throws { Write-HardwarePrompt } 'Installed RAM capacity could not be read'
+        $script:Mode = 'ok'
     }
     Test-Case 'Model acquisition creates context-budget alias' {
         $script:Questions.Clear()
