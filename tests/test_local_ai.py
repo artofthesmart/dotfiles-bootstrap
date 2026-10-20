@@ -77,19 +77,32 @@ with open(os.environ["CALL_LOG"], "a") as log:
 if name == "id":
     print("1000")
 elif name == "code":
+    profile = pathlib.Path(os.environ["PROFILE_STATE"])
+    extension = pathlib.Path(os.environ["EXTENSION_STATE"])
     if "--version" in args:
         print(os.environ.get("CODE_VERSION", "1.127.0") + "\nfixture\nx64")
+    elif "--new-window" in args and "--profile" in args:
+        if not os.environ.get("FAIL_PROFILE_CREATE"):
+            profile.touch()
     elif os.environ.get("FAIL_CODE") == "install" and "--install-extension" in args:
         print("fixture extension install failure", file=sys.stderr)
-        sys.exit(9)
-    elif os.environ.get("FAIL_CODE") == "list" and "--list-extensions" in args:
-        print("fixture extension list failure", file=sys.stderr)
         sys.exit(9)
     elif "--install-extension" in args and "GitHub.copilot-chat" in args:
         print("built-in extension cannot be installed", file=sys.stderr)
         sys.exit(1)
+    elif "--install-extension" in args:
+        if not profile.exists():
+            print("Profile 'Local AI' not found.", file=sys.stderr)
+            sys.exit(1)
+        extension.touch()
     elif "--list-extensions" in args:
-        if not os.environ.get("MISSING_EXTENSION"):
+        if not profile.exists():
+            print("Profile 'Local AI' not found.", file=sys.stderr)
+            sys.exit(1)
+        if os.environ.get("FAIL_CODE") == "list" and extension.exists():
+            print("fixture extension list failure", file=sys.stderr)
+            sys.exit(9)
+        if extension.exists() and not os.environ.get("MISSING_EXTENSION"):
             print("Ollama.ollama")
 elif name == "ollama":
     if os.environ.get("FAIL_OLLAMA") == args[0]:
@@ -169,6 +182,8 @@ class WizardTests(unittest.TestCase):
         self.env = dict(os.environ, HOME=str(self.home), PATH=f"{self.bin}:" + os.environ["PATH"],
                         CALL_LOG=str(self.log), FIXTURE_HOST=f"127.0.0.1:{self.server.server_port}",
                         REAL_CURL=shutil.which("curl"), DISPLAY=":fixture", OLLAMA_HOST="https://not-used.invalid")
+        self.env["PROFILE_STATE"] = str(self.base / "profile-created")
+        self.env["EXTENSION_STATE"] = str(self.base / "ollama-extension-installed")
         self.source = "source " + shlex.quote(str(SCRIPT)) + "; "
         self.state = self.home / ".local/share/local-ai-setup"
         self.state.mkdir(parents=True)
@@ -216,16 +231,17 @@ class WizardTests(unittest.TestCase):
         self.assertEqual(self.calls("ollama"), [])
 
     def test_model_acquisition_and_actual_tool_call(self):
-        result = self.run_shell("choose_model; check_model", "1\nmodel:q4\n4\n65536\ny\n")
+        result = self.run_shell("choose_model; check_model", "model:q4\n4\n65536\ny\n")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn(["ollama", "pull", "model:q4"], self.calls("ollama"))
         chat = next(body for path, body in self.server.requests if path == "/api/chat")
         self.assertEqual(chat["model"], "local-ai-model-q4")
         self.assertEqual(chat["options"]["num_ctx"], 65536)
         self.assertIn("tool-call check passed", result.stdout)
-        self.assertIn("https://ollama.com/library", result.stdout)
+        self.assertIn("Detected an Ollama Library model name", result.stdout)
         self.assertIn("Verified review", result.stdout)
         self.assertIn("GGUF context limit: 131072", result.stdout)
+        self.assertNotIn("Model source:", result.stdout)
         self.assertIn("PARAMETER num_ctx 65536", (self.base / "work/Modelfile").read_text())
         positions = [result.stdout.index(label + ":") for label in ("MODEL", "DOWNLOAD_GIB", "CONTEXT_TOKENS")]
         self.assertEqual(positions, sorted(positions))
@@ -233,7 +249,7 @@ class WizardTests(unittest.TestCase):
     def test_gguf_import_with_spaces(self):
         gguf = self.base / "weights with spaces.gguf"
         gguf.write_bytes(b"GGUFfixture")
-        result = self.run_shell("choose_model", f"2\n{gguf}\nimported\n4\n\ny\n")
+        result = self.run_shell("choose_model", f"https://huggingface.co/example/tool-model\n{gguf}\nimported\n4\n\ny\n")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(self.calls("ollama")[0][1:3], ["create", "imported"])
         self.assertNotIn("pull", [row[1] for row in self.calls("ollama")])
@@ -241,14 +257,17 @@ class WizardTests(unittest.TestCase):
     def test_invalid_gguf_rejected(self):
         gguf = self.base / "bad.gguf"
         gguf.write_text("not a GGUF")
-        result = self.run_shell("choose_model", f"2\n{gguf}\n")
+        result = self.run_shell("choose_model", f"https://huggingface.co/example/tool-model\n{gguf}\n")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("not a GGUF", result.stderr)
         self.assertEqual(self.calls("ollama"), [])
+        result = self.run_shell("choose_model", "https://example.invalid/model.gguf\n")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Only huggingface.co URLs", result.stderr)
 
     def test_low_disk_rejected_before_download(self):
         self.env["FREE_KIB"] = "1048576"
-        result = self.run_shell("choose_model", "1\nmodel\n4\n\n")
+        result = self.run_shell("choose_model", "model\n4\n\n")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Not enough", result.stderr)
         self.assertFalse(any(row[1] == "pull" for row in self.calls("ollama")))
@@ -260,24 +279,24 @@ class WizardTests(unittest.TestCase):
         self.assertEqual(self.calls("ollama"), [])
 
     def test_context_and_size_validation(self):
-        for answers in ["1\nmodel\nbad\n", "1\nmodel\n1\n999999999999999999999\n", "1\nmodel\n1\n0\n"]:
+        for answers in ["model\nbad\n", "model\n1\n999999999999999999999\n", "model\n1\n0\n"]:
             result = self.run_shell("choose_model", answers)
             self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.calls("ollama"), [])
-        result = self.run_shell("choose_model; check_model", "1\nmodel\n1\n0065536\ny\n")
+        result = self.run_shell("choose_model; check_model", "model\n1\n0065536\ny\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         chat = next(body for path, body in self.server.requests if path == "/api/chat")
         self.assertEqual(chat["options"]["num_ctx"], 65536)
 
     def test_context_minimum_and_model_supported_limit(self):
         for context in ("8192", "32768", "65535"):
-            result = self.run_shell("choose_model", f"1\nmodel\n1\n{context}\n")
+            result = self.run_shell("choose_model", f"model\n1\n{context}\n")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("65536", result.stderr)
         self.assertEqual(self.calls("ollama"), [])
         for mode in ("short-context", "info-context"):
             self.env["REGISTRY_CONTEXT"] = "32768"
-            result = self.run_shell("choose_model", "1\nmodel\n1\n\ny\n")
+            result = self.run_shell("choose_model", "model\n1\n\ny\n")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("32768", result.stderr)
             self.assertFalse(any(row[1] == "pull" for row in self.calls("ollama")))
@@ -285,12 +304,12 @@ class WizardTests(unittest.TestCase):
             self.env.pop("REGISTRY_CONTEXT")
             self.server.mode = mode
         self.server.mode = "unknown-context"
-        result = self.run_shell("choose_model", "1\nmodel\n1\n\ny\n")
+        result = self.run_shell("choose_model", "model\n1\n\ny\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("did not report a supported context limit", result.stdout)
 
     def test_no_suitable_recommendation_stops_before_download(self):
-        result = self.run_shell("choose_model", "1\nNONE\n")
+        result = self.run_shell("choose_model", "NONE\n")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("no suitable model", result.stderr)
         self.assertEqual(self.calls("ollama"), [])
@@ -303,14 +322,14 @@ class WizardTests(unittest.TestCase):
         self.assertFalse(any(row[1] == "pull" for row in self.calls("ollama")))
 
     def test_out_of_catalog_gemini_recommendation_stops_before_pull(self):
-        result = self.run_shell("choose_model", "1\nqwen2.5-coder:14b\n9\n\n")
+        result = self.run_shell("choose_model", "qwen2.5-coder:14b\n9\n\n")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("not in the wizard-verified candidate list", result.stderr)
         self.assertFalse(any(row[1] == "pull" for row in self.calls("ollama")))
 
     def test_installed_exact_model_is_reused_without_pull(self):
         self.env["INSTALLED_MODEL"] = "model:q4"
-        result = self.run_shell("choose_model", "1\nmodel:q4\n4\n\ny\n")
+        result = self.run_shell("choose_model", "model:q4\n4\n\ny\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("already-installed model", result.stdout)
         self.assertFalse(any(row[1] == "pull" for row in self.calls("ollama")))
@@ -320,7 +339,7 @@ class WizardTests(unittest.TestCase):
         for mode, message in [("remote", "cloud inference"), ("no-tools", "advertise tools")]:
             with self.subTest(mode=mode):
                 self.server.mode = mode
-                result = self.run_shell("choose_model", "1\nmodel\n1\n\ny\n")
+                result = self.run_shell("choose_model", "model\n1\n\ny\n")
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(message, result.stderr)
 
@@ -338,7 +357,7 @@ class WizardTests(unittest.TestCase):
 
     def test_pull_failure_stops_before_profile_creation(self):
         self.env["FAIL_OLLAMA"] = "pull"
-        result = self.run_shell("choose_model; connect_code", "1\nmodel\n1\n\ny\n")
+        result = self.run_shell("choose_model; connect_code", "model\n1\n\ny\n")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Download failed", result.stderr)
         self.assertEqual(self.calls("code"), [])
@@ -405,7 +424,7 @@ class WizardTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("too old", result.stderr)
         self.env["MISSING_EXTENSION"] = "1"
-        result = self.run_shell("connect_code", "y\n")
+        result = self.run_shell("connect_code", f"y\n{self.repo}\n")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("not installed", result.stderr)
         for mode, message in [
@@ -414,11 +433,17 @@ class WizardTests(unittest.TestCase):
         ]:
             with self.subTest(mode=mode):
                 self.env.pop("MISSING_EXTENSION", None)
+                Path(self.env["EXTENSION_STATE"]).unlink(missing_ok=True)
                 self.env["FAIL_CODE"] = mode
-                result = self.run_shell("connect_code", "y\n")
+                result = self.run_shell("connect_code", f"y\n{self.repo}\n")
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(message, result.stderr)
                 self.env.pop("FAIL_CODE")
+        self.env["FAIL_PROFILE_CREATE"] = "1"
+        Path(self.env["PROFILE_STATE"]).unlink(missing_ok=True)
+        result = self.run_shell("sleep() { :; }; connect_code", f"y\n{self.repo}\n")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("did not make the Local AI profile available", result.stderr)
 
     def test_existing_apps_outside_path_and_private_jq(self):
         self.env["PATH"] = "/usr/bin:/bin"
@@ -488,10 +513,13 @@ class WizardTests(unittest.TestCase):
         for row in self.calls("code"):
             self.assertEqual(row[row.index("--profile") + 1], "Local AI")
         self.assertFalse(any("GitHub.copilot-chat" in row for row in self.calls("code")))
-        self.assertIn(str(self.repo), self.calls("code")[-1])
+        self.assertTrue(any("--new-window" in row and str(self.repo) in row for row in self.calls("code")))
+        launches = [i for i, row in enumerate(self.calls("code")) if "--new-window" in row]
+        installs = [i for i, row in enumerate(self.calls("code")) if "--install-extension" in row]
+        self.assertTrue(launches and installs and launches[0] < installs[0])
 
     def test_full_interactive_flow_with_fake_api(self):
-        answers = f"\nn\n\n1\nllama3.1:8b\n5\n65536\ny\ny\n{self.repo}\n"
+        answers = f"\nn\n\nllama3.1:8b\n5\n65536\ny\ny\n{self.repo}\n"
         master, slave = pty.openpty()
         # Platform detection has its own tests; no host-specific install paths.
         command = self.source + 'detect_platform() { OS=Linux; ARCH=amd64; OS_VERSION=fixture; }; main'

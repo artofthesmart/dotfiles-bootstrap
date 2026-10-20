@@ -383,33 +383,45 @@ validate_local_model_metadata() {
         fail "Model does not advertise tools. Choose a tool-capable model; do not force-enable unsupported tools."
 }
 choose_model() {
-    local source size needed available gguf import_path context installed=false gguf_limit=0 exact_gib free_gib gguf_bytes
-    printf '\nChoose a small, tool-capable model from https://ollama.com/library to run on this computer.\n'
+    local source selection size needed available gguf import_path context installed=false gguf_limit=0 exact_gib free_gib gguf_bytes
+    printf '\nPaste Gemini'\''s exact Ollama model tag or Hugging Face URL.\n'
     printf 'Gemini is advisory. Before downloading, this wizard checks the exact tag, registry size, and GGUF context metadata.\n'
     printf 'Already-installed models are checked and reused without pulling them again.\n'
-    ask "Model source: 1 = Ollama Library (recommended), 2 = import a downloaded Hugging Face GGUF"
-    source=$ANSWER
-    case "$source" in
-        1)
-            ask 'MODEL: paste the exact model name and tag from Gemini (without "ollama run")'
-            MODEL=$ANSWER
+    ask "MODEL: paste the exact Ollama model name/tag, or a huggingface.co URL for a GGUF import"
+    selection=$ANSWER
+    case "$selection" in
+        https://huggingface.co/*)
+            source=2
+            printf 'Detected a Hugging Face source. Download a compatible single-file GGUF from that page yourself.\n'
+            printf 'Check its license, architecture, quantization and tool/chat-template support; arbitrary models may not work.\n'
+            ask "Full path to the downloaded single-file .gguf"
+            gguf=$ANSWER
+            ;;
+        /*.gguf)
+            source=2
+            gguf=$selection
+            printf 'Detected a local GGUF file.\n'
+            ;;
+        http://*|https://*)
+            fail "Only huggingface.co URLs are accepted for GGUF imports; otherwise paste an exact Ollama model name and tag."
+            ;;
+        *)
+            source=1
+            MODEL=$selection
+            printf 'Detected an Ollama Library model name.\n'
             [ "$MODEL" != NONE ] || fail "Gemini found no suitable model at 65536+ context. Review its explanation; do not download an unsuitable model."
             valid_model "$MODEL" || fail "Use a simple Library model[:tag], not a command, URL, namespace, or cloud model."
             ;;
-        2)
-            printf 'Download a compatible single-file GGUF from its Hugging Face page yourself.\nCheck license, architecture, quantization and tool/chat-template support. Arbitrary models may not work.\n'
-            ask "Full path to your downloaded single-file .gguf"
-            gguf=$ANSWER
-            [ -f "$gguf" ] && [[ "$gguf" = /*.gguf ]] || fail "Choose an existing absolute .gguf path."
-            [[ "$gguf" != *$'\n'* && "$gguf" != *$'\r'* ]] || fail "Newlines in paths are unsupported."
-            [ "$(head -c 4 "$gguf")" = GGUF ] || fail "The file is not a GGUF."
-            import_path=$(printf '%s' "$gguf" | sed 's/\\/\\\\/g; s/"/\\"/g')
-            ask "Local name for this import (use a new name to preserve previous models)"
-            MODEL=$ANSWER
-            valid_model "$MODEL" || fail "Invalid local model name or cloud tag."
-            ;;
-        *) fail "Choose 1 or 2." ;;
     esac
+    if [ "$source" = 2 ]; then
+        [ -f "$gguf" ] && [[ "$gguf" = /*.gguf ]] || fail "Choose an existing absolute .gguf path."
+        [[ "$gguf" != *$'\n'* && "$gguf" != *$'\r'* ]] || fail "Newlines in paths are unsupported."
+        [ "$(head -c 4 "$gguf")" = GGUF ] || fail "The file is not a GGUF."
+        import_path=$(printf '%s' "$gguf" | sed 's/\\/\\\\/g; s/"/\\"/g')
+        ask "Local name for this import (use a new name to preserve previous models)"
+        MODEL=$ANSWER
+        valid_model "$MODEL" || fail "Invalid local model name or cloud tag."
+    fi
     ask "DOWNLOAD_GIB: paste Gemini's estimate (number only; Enter if unknown; verified registry/file size overrides it)"
     size=$ANSWER
     if [ -n "$size" ]; then
@@ -501,23 +513,42 @@ check_model() {
     "$OLLAMA" ps
     printf 'CPU-only offload can be slow even if a GPU is installed. No GPU drivers were changed.\n'
 }
+wait_for_code_profile() {
+    local attempt=1
+    while [ "$attempt" -le 15 ]; do
+        if "$CODE" --profile "Local AI" --list-extensions > "$WORK/extensions.txt" 2> "$WORK/code-profile-error.txt"; then
+            return 0
+        fi
+        if [ "$attempt" -eq 1 ]; then printf 'Waiting for VS Code to finish creating the Local AI profile...\n'; fi
+        attempt=$((attempt + 1))
+        [ "$attempt" -gt 15 ] || sleep 1
+    done
+    cat "$WORK/code-profile-error.txt" >&2
+    fail "VS Code did not make the Local AI profile available after opening it."
+}
 connect_code() {
     printf '\nGitHub Copilot Chat is bundled with this supported VS Code version.\n'
     printf 'Installing the official Ollama extension only for the Local AI profile.\n'
-    confirm "Create/reuse Local AI and install Ollama.ollama" || fail "Profile setup cancelled."
-    "$CODE" --profile "Local AI" --install-extension Ollama.ollama ||
-        fail "VS Code could not install Ollama.ollama in the Local AI profile."
-    "$CODE" --profile "Local AI" --list-extensions > "$WORK/extensions.txt" ||
-        fail "VS Code could not list extensions in the Local AI profile."
-    grep -qi '^Ollama.ollama$' "$WORK/extensions.txt" ||
-        fail "The Ollama extension was not installed in the Local AI profile."
+    confirm "Open your repository in Local AI and install Ollama.ollama" || fail "Profile setup cancelled."
     local repo
     ask "Full path to an existing locally checked-out repository"
     repo=$ANSWER
     [[ "$repo" = /* ]] && [ -d "$repo" ] || fail "Choose an existing absolute directory path."
     command -v git >/dev/null || fail "Git is needed to verify the checkout. Install Git and rerun."
     git -C "$repo" rev-parse --show-toplevel >/dev/null 2>&1 || fail "That directory is not in a Git checkout."
-    "$CODE" --new-window --profile "Local AI" "$repo"
+    "$CODE" --new-window --profile "Local AI" "$repo" ||
+        fail "VS Code could not open the repository with the Local AI profile."
+    wait_for_code_profile
+    if grep -qi '^Ollama.ollama$' "$WORK/extensions.txt"; then
+        printf 'The Ollama extension is already installed in Local AI; no reinstall needed.\n'
+    else
+        "$CODE" --profile "Local AI" --install-extension Ollama.ollama ||
+            fail "VS Code could not install Ollama.ollama in the Local AI profile."
+        "$CODE" --profile "Local AI" --list-extensions > "$WORK/extensions.txt" ||
+            fail "VS Code could not list extensions in the Local AI profile."
+    fi
+    grep -qi '^Ollama.ollama$' "$WORK/extensions.txt" ||
+        fail "The Ollama extension was not installed in the Local AI profile."
     cat <<INSTRUCTIONS
 
 Finish in the Local AI window (these UI steps are not automated):
@@ -525,6 +556,7 @@ Finish in the Local AI window (these UI steps are not automated):
 2. Open the built-in Copilot Chat, select Agent mode, then select $LOCAL_MODEL under Ollama.
    Do NOT select Auto or a cloud model. If missing, run "Ollama: Refresh Models"
    or "Ollama: Diagnose Models" from the Command Palette.
+   If those commands do not appear yet, run "Developer: Reload Window" once.
 3. In this profile's Settings, enable chat.agentHost.byokModels.enabled if
    required for the Copilot harness. Set chat.utilityModel and
    chat.utilitySmallModel to your local model using their model pickers.

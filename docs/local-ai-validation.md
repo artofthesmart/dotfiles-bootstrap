@@ -43,7 +43,8 @@ point. Fixtures and fake executables prevent real installs, downloads or edits
 to user profiles. The Bash full-flow test uses a terminal fixture and a fake
 loopback Ollama server on a dynamically assigned port.
 
-Coverage includes model input validation, cancellation, GGUF validation,
+Coverage includes automatic Ollama-tag versus Hugging Face URL detection,
+model input validation, cancellation, GGUF validation,
 exact-tag registry preflight, pre-download context rejection, installed-model
 reuse, context-budget aliases, storage limits, explicit download/HTTP/tool
 failures, cloud metadata rejection, hardware field allowlisting and profile-scoped
@@ -148,7 +149,10 @@ For each platform, exercise these steps:
   This makes Gemini the hardware-fit advisor, not the source of truth for tag
   eligibility. Some shortlisted models can still fail the local tool smoke test
   or perform poorly as agents. GGUF magic validation alone only identifies the
-  format; Ollama still validates actual compatibility.
+  format; Ollama still validates actual compatibility. The wizard infers the
+  source from the first answer: a simple model name/tag uses the Ollama Library,
+  while an `https://huggingface.co/...` URL starts the guided GGUF import. It no
+  longer asks the user to classify the source manually.
 - **Context:** the wizard creates a `local-ai-...` model with `num_ctx`.
   It defaults to 65536 and accepts 65536-1048576 tokens, not as a hardware
   guarantee. The official extension recommends at least 65536 tokens; this
@@ -180,7 +184,11 @@ For each platform, exercise these steps:
   `--install-extension`; current VS Code can return exit 1 for a built-in
   extension. The wizard installs only `Ollama.ollama` into Local AI. Native
   command failures now include the command, exit code, stdout and stderr for
-  diagnosis, including version and extension-list checks.
+  diagnosis, including version and extension-list checks. On a first run, the
+  wizard validates the repository and opens it with `--profile "Local AI"`
+  before installing the extension, because launching creates a missing profile
+  while `--install-extension --profile` alone can fail with "Profile not found."
+  It waits briefly for profile creation, then installs and verifies the extension.
 - **Download transport:** application installers and Ollama registry metadata
   must begin and remain on HTTPS across redirects. A downgrade to HTTP is
   rejected. This protects transport integrity but does not pin release content;
