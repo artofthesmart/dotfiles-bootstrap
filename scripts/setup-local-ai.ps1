@@ -194,7 +194,9 @@ function Get-PromptPath {
 function Write-HardwarePrompt {
     $osInfo = Get-CimInstance Win32_OperatingSystem
     $processors = @(Get-CimInstance Win32_Processor | Select-Object -ExpandProperty Name)
-    $ram = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
+    $ramBytes = (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory
+    $ram = [math]::Round($ramBytes / 1GB, 1)
+    $sharedCeiling = [math]::Round($ramBytes / 2GB, 1)
     $gpuNames = @(Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name)
     $gpu = $gpuNames -join '; '
     $vram = 'Unknown; Windows AdapterRAM is deliberately not used'
@@ -209,11 +211,8 @@ function Write-HardwarePrompt {
         } else { Write-Warning 'nvidia-smi failed. GPU memory/acceleration is unknown.' }
     }
     Write-Host "GPU information: $gpu"
-    $manual = Read-Choice 'Optional GPU memory in GiB from the hardware specification (Enter if unknown)'
-    if ($manual) {
-        if ($manual -notmatch '^[0-9]+(\.[0-9]+)?$') { throw 'GPU memory must be numeric GiB.' }
-        $vram = "$manual GiB (user supplied; not automatically verified)"
-    }
+    Write-Host "System RAM: $ram GiB. If using an integrated GPU, shared memory is variable, not a fixed extra pool."
+    Write-Host "For iGPU planning, use up to 50% of system RAM ($sharedCeiling GiB), not guaranteed available memory."
     $free = [math]::Round((Get-ModelVolume).AvailableFreeSpace / 1GB, 1)
     $promptText = @"
 Recommend a practical LOCAL Ollama coding model for VS Code Agent mode.
@@ -222,8 +221,23 @@ CPU: $($processors -join '; ')
 RAM: $ram GiB
 GPU: $gpu
 GPU memory: $vram
+Windows iGPU planning ceiling: up to 50% of system RAM ($sharedCeiling GiB), shared dynamically
 Acceleration: $acceleration
 Free model-volume space: $free GiB
+
+MEMORY ACCOUNTING RULES:
+If this machine uses an integrated GPU/APU, use system RAM above as ONE physical
+pool. Up to 50% of system RAM could be made available for running Ollama models;
+use that as a planning ceiling, NOT a fixed reservation, currently free memory,
+extra dedicated VRAM, or a guaranteed driver/Ollama allocation.
+Do not infer a BIOS carve-out or fixed GPU allocation from the GPU model name.
+Do not add shared GPU memory to RAM or subtract it as a permanently reserved pool.
+Budget model weights, KV cache at 65536+ context, runtime overhead and OS/editor
+headroom together. Do not claim exact remaining/free RAM or no swapping without
+actual usage measurements. Do not promise full GPU offload or fast generation
+without confirming the backend, driver and actual Ollama runtime allocation.
+This 50% planning rule is for Windows iGPUs, not a dedicated-GPU VRAM estimate.
+Keep separately detected dedicated GPU memory separate; do not combine pools.
 
 REQUIRED RESPONSE FORMAT: Start your response with this copy-back block, before
 any greeting, explanation, heading, or analysis. Replace placeholders with values:
@@ -359,14 +373,14 @@ function Test-LocalModel([int]$OutputTokens = 1024) {
     $body = @{
         model = $script:LocalModel; stream = $false
         options = @{ num_ctx = $script:Context; num_predict = $OutputTokens; temperature = 0 }
-        messages = @(@{ role = 'user'; content = 'Call local_ai_check with value ready. Do not answer in prose.' })
+        messages = @(@{ role = 'user'; content = 'What is the temperature in New York?' })
         tools = @(@{
             type = 'function'
             function = @{
-                name = 'local_ai_check'; description = 'Harmless setup check. Call with value ready.'
+                name = 'get_temperature'; description = 'Get the current temperature for a city'
                 parameters = @{
-                    type = 'object'; properties = @{ value = @{ type = 'string'; enum = @('ready') } }
-                    required = @('value')
+                    type = 'object'; properties = @{ city = @{ type = 'string'; description = 'The name of the city' } }
+                    required = @('city')
                 }
             }
         })
@@ -378,8 +392,8 @@ function Test-LocalModel([int]$OutputTokens = 1024) {
         $response.PSObject.Properties['message'] -and $response.message.PSObject.Properties['tool_calls']) {
         foreach ($call in $response.message.tool_calls) {
             if ($call.PSObject.Properties['function'] -and $call.function.PSObject.Properties['name'] -and
-                $call.function.name -ceq 'local_ai_check' -and $call.function.PSObject.Properties['arguments'] -and
-                $call.function.arguments.PSObject.Properties['value'] -and $call.function.arguments.value -ceq 'ready') { $valid = $true }
+                $call.function.name -ceq 'get_temperature' -and $call.function.PSObject.Properties['arguments'] -and
+                $call.function.arguments.PSObject.Properties['city'] -and $call.function.arguments.city -ieq 'New York') { $valid = $true }
         }
     }
     if (-not $valid) {
