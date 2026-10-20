@@ -78,9 +78,10 @@ For each platform, exercise these steps:
 2. Confirm model-storage volume selection, disk estimates and the allowlisted
    hardware report. Review missing memory fields before sharing with Gemini.
    Confirm the wizard makes no Gemini call.
-   Check that Gemini is instructed to put `MODEL`, `DOWNLOAD_GIB`, then
-   `CONTEXT_TOKENS` first, matching the wizard's questions. Context must be at
-   least 65536 and fit hardware with model weights plus KV cache and OS headroom.
+   Confirm the prompt contains a freshly preflighted exact-tag catalog. Check
+   that Gemini is restricted to that list and instructed to put `MODEL`,
+   `DOWNLOAD_GIB`, then `CONTEXT_TOKENS: 65536` first, matching the wizard.
+   Context must fit hardware with model weights plus KV cache and OS headroom.
    Distinguish structured tool-call evidence from coding benchmarks or JSON prose.
 3. Preflight a compatible tag and a known 32K tag. Confirm exact registry layer
    size and GGUF context are shown before confirmation, and that the 32K tag is
@@ -136,10 +137,14 @@ For each platform, exercise these steps:
   context metadata before a multi-gigabyte pull. If registry or context metadata
   cannot be verified, it stops without downloading. Leave space for the OS,
   caches and temporary/imported copies too.
-- **Model choice:** the Gemini prompt is advice, not a benchmark. Some models
-  advertise tools but fail the smoke test or perform poorly as agents. Try
-  the fallback or a different tool-capable template. GGUF magic validation
-  only identifies the format; Ollama still validates actual compatibility.
+- **Model choice:** before showing the Gemini prompt, the wizard preflights a
+  small maintainer shortlist and embeds only exact tags whose current registry
+  GGUF metadata reports at least 65536 context tokens. Gemini may choose only
+  from that generated list; an out-of-catalog answer is rejected before pull.
+  This makes Gemini the hardware-fit advisor, not the source of truth for tag
+  eligibility. Some shortlisted models can still fail the local tool smoke test
+  or perform poorly as agents. GGUF magic validation alone only identifies the
+  format; Ollama still validates actual compatibility.
 - **Context:** the wizard creates a `local-ai-...` model with `num_ctx`.
   It defaults to 65536 and accepts 65536-1048576 tokens, not as a hardware
   guarantee. The official extension recommends at least 65536 tokens; this

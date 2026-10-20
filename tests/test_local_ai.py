@@ -170,6 +170,10 @@ class WizardTests(unittest.TestCase):
             f'WORK={shlex.quote(str(self.base / "work"))}; mkdir -p "$WORK"; '
             f'MODEL_VOLUME="$HOME"; CODE={shlex.quote(str(self.bin / "code"))}; '
             f'OLLAMA={shlex.quote(str(self.bin / "ollama"))}; JQ={shlex.quote(shutil.which("jq"))}; '
+            'VERIFIED_CANDIDATES_FILE="$WORK/verified-candidates.tsv"; '
+            'printf "model:latest\\t%s\\t%s\\nmodel:q4\\t%s\\t%s\\n" '
+            '"${REGISTRY_BYTES:-4294967296}" "${REGISTRY_CONTEXT:-131072}" '
+            '"${REGISTRY_BYTES:-4294967296}" "${REGISTRY_CONTEXT:-131072}" > "$VERIFIED_CANDIDATES_FILE"; '
         )
 
     def stub(self, name):
@@ -285,9 +289,15 @@ class WizardTests(unittest.TestCase):
 
     def test_registry_failure_stops_before_pull(self):
         self.env["FAIL_REGISTRY"] = "1"
-        result = self.run_shell("choose_model", "1\nmodel\n1\n\n")
+        result = self.run_shell("MODEL=model; remote_model_preflight")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("No model was downloaded", result.stderr)
+        self.assertFalse(any(row[1] == "pull" for row in self.calls("ollama")))
+
+    def test_out_of_catalog_gemini_recommendation_stops_before_pull(self):
+        result = self.run_shell("choose_model", "1\nqwen2.5-coder:14b\n9\n\n")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("not in the wizard-verified candidate list", result.stderr)
         self.assertFalse(any(row[1] == "pull" for row in self.calls("ollama")))
 
     def test_installed_exact_model_is_reused_without_pull(self):
@@ -340,6 +350,10 @@ class WizardTests(unittest.TestCase):
         self.assertIn("structured Ollama API tool_calls", prompt)
         self.assertIn("MANDATORY FOR THIS SETUP", prompt)
         self.assertIn("Do not lower context to make it fit", prompt)
+        self.assertIn("ONLY allowed Ollama Library recommendations", prompt)
+        self.assertIn("llama3.1:8b", prompt)
+        self.assertNotIn("qwen2.5-coder", prompt)
+        self.assertIn("CONTEXT_TOKENS: 65536 exactly", prompt)
         self.assertIn("nvidia-smi failed", result.stdout)
 
     def test_documents_location_respects_redirect_and_disabled_xdg(self):
@@ -453,7 +467,7 @@ class WizardTests(unittest.TestCase):
         self.assertIn(str(self.repo), self.calls("code")[-1])
 
     def test_full_interactive_flow_with_fake_api(self):
-        answers = f"\nn\n\n1\nmodel:q4\n4\n65536\ny\ny\n{self.repo}\n"
+        answers = f"\nn\n\n1\nllama3.1:8b\n5\n65536\ny\ny\n{self.repo}\n"
         master, slave = pty.openpty()
         # Platform detection has its own tests; no host-specific install paths.
         command = self.source + 'detect_platform() { OS=Linux; ARCH=amd64; OS_VERSION=fixture; }; main'

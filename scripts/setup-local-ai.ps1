@@ -3,6 +3,7 @@
 param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$script:VerifiedCandidates = $null
 
 function Read-Choice([string]$Message) {
     $answer = Read-Host "$Message (q to quit)"
@@ -223,6 +224,11 @@ function Write-HardwarePrompt {
     Write-Host "Installed RAM: $ram GiB. Windows-visible RAM: $visibleRam GiB (not installed capacity or currently free memory)."
     Write-Host "For iGPU planning, 50% of installed RAM is $sharedCeiling GiB; actual availability depends on Windows and the driver."
     $free = [math]::Round((Get-ModelVolume).AvailableFreeSpace / 1GB, 1)
+    $candidates = @(Get-VerifiedCandidateCatalog)
+    $candidateLines = @($candidates | ForEach-Object {
+        $candidateSize = ($_.DownloadBytes / 1GB).ToString('0.0', [Globalization.CultureInfo]::InvariantCulture)
+        "- $($_.Model) | DOWNLOAD_GIB $candidateSize | VERIFIED_CONTEXT_TOKENS $($_.ContextLength)"
+    }) -join "`n"
     $promptText = @"
 Recommend a practical LOCAL Ollama coding model for VS Code Agent mode.
 OS: $($osInfo.Caption), version $($osInfo.Version); architecture: x64
@@ -234,6 +240,23 @@ GPU memory: $vram
 Windows iGPU planning ceiling: up to 50% of installed RAM ($sharedCeiling GiB), shared dynamically; actual availability unverified
 Acceleration: $acceleration
 Free model-volume space: $free GiB
+
+WIZARD-VERIFIED EXACT-TAG CANDIDATES:
+$candidateLines
+
+These are the ONLY allowed Ollama Library recommendations for this run. The
+wizard read each exact tag's registry layers and GGUF context metadata directly.
+Choose MODEL exactly as written from this list, or use MODEL: NONE. Do not output
+another tag, alias, quantization, family member or Hugging Face model in the
+copy-back block. Repeat that candidate's DOWNLOAD_GIB value. Output
+CONTEXT_TOKENS: 65536 exactly; the verified context is the supported ceiling,
+not the requested allocation. Tool use is still unverified until the wizard's
+post-download local metadata and structured tool-call checks pass.
+
+TOOL CALLING STATUS:
+The shortlist is limited to models currently presented as tool-capable by
+Ollama, but that label is not proof. Do not claim success; the wizard must see
+an actual structured Ollama API tool_calls response from the downloaded exact tag.
 
 MEMORY ACCOUNTING RULES:
 If this machine uses an integrated GPU/APU, use installed RAM above as ONE physical
@@ -265,21 +288,13 @@ Put ALL analysis, links, caveats and fallback choices
 AFTER this block. Do not invent a runnable recommendation if none is suitable:
 use MODEL: NONE and explain the blocker afterward.
 
-Use current official sources and provide links, not an assumed universal optimum.
-Recommend a primary and smaller fallback with reliable TOOL CALLING, exact LOCAL
-Ollama Library tag, model-page/download link, quantization, download size in GiB,
-license/commercial-use caveats, realistic speed expectations, and memory headroom
-for OS, VS Code, model weights AND KV cache. Account for shared versus dedicated
-memory; do not add GPUs' VRAM together. Recommend a practical context size for
-agents and explain the quality/speed tradeoff. Do not suggest cloud inference.
-Require evidence of structured Ollama API tool_calls for the exact recommended
-variant/template, not just coding benchmarks, a tools label, or JSON in chat text.
-If exact-variant tool behavior is unverified, state that prominently after the
-copy-back block; do not promise VS Code Agent compatibility.
-Treat DOWNLOAD_GIB as an estimate only. The wizard independently checks the exact
-tag's registry layers and GGUF context metadata before any Ollama Library download.
-Do not infer an exact tag's context from family-level claims, a different quantization,
-or a model card alone. Cite the exact Ollama tag page and the source for context claims.
+Compare ONLY the verified candidates above and explain which best fits this
+hardware. Recommend a primary and smaller fallback from that same list, with
+official model-page links, license/commercial-use caveats, realistic speed
+expectations, and memory headroom for OS, VS Code, model weights AND KV cache.
+Account for shared versus dedicated memory; do not add GPUs' VRAM together.
+Do not suggest cloud inference. Do not claim structured tool calling is verified:
+the wizard will test the exact downloaded model locally.
 MANDATORY FOR THIS SETUP: We need at least 65536 tokens of context for the
 VS Code Ollama extension. Recommend only models whose supported context window
 is at least 65536 AND whose weights plus KV cache at that context fit this
@@ -438,6 +453,37 @@ function Get-RemoteOllamaModelInfo([string]$Name) {
         throw "Could not safely verify exact tag $canonical before download: $($_.Exception.Message) No model was downloaded."
     }
 }
+function Get-VerifiedCandidateCatalog {
+    $shortlist = @(
+        'llama3.1:8b',
+        'mistral-nemo:12b',
+        'gpt-oss:20b',
+        'devstral:24b',
+        'qwen3-coder:30b'
+    )
+    $script:VerifiedCandidates = @{}
+    foreach ($candidate in $shortlist) {
+        try {
+            $info = Get-RemoteOllamaModelInfo $candidate
+            if ($info.ContextLength -ge 65536) {
+                $script:VerifiedCandidates[$info.Model] = $info
+            }
+        } catch {
+            Write-Warning "Skipped candidate $candidate because exact-tag preflight failed: $($_.Exception.Message)"
+        }
+    }
+    if ($script:VerifiedCandidates.Count -eq 0) {
+        throw 'No exact-tag candidate could be verified from the Ollama registry. Check the connection and rerun; no model was downloaded.'
+    }
+    return @($script:VerifiedCandidates.Values | Sort-Object DownloadBytes)
+}
+function Get-VerifiedCandidateInfo([string]$Name) {
+    $canonical = Get-CanonicalModelName $Name
+    if ($null -eq $script:VerifiedCandidates -or -not $script:VerifiedCandidates.ContainsKey($canonical)) {
+        throw "Model $canonical was not in the wizard-verified candidate list given to Gemini. Use an exact listed tag or rerun for a fresh catalog. No model was downloaded."
+    }
+    return $script:VerifiedCandidates[$canonical]
+}
 function Get-ModelContextLimit($Metadata) {
     $limits = @()
     if ($Metadata.PSObject.Properties['details'] -and $Metadata.details.PSObject.Properties['context_length']) {
@@ -508,6 +554,7 @@ function Select-LocalModel {
     $script:LocalModel = 'local-ai-' + $script:Model.Replace(':', '-')
     $modelfile = Join-Path $script:Work 'Modelfile'
     if ($source -eq '1') {
+        $remoteInfo = Get-VerifiedCandidateInfo $script:Model
         $installed = Test-ModelInstalled $script:Model
         if ($installed) {
             $metadata = Invoke-OllamaApi 'show' @{ model = $script:Model }
@@ -519,7 +566,6 @@ function Select-LocalModel {
             Write-Host "  VS Code alias: $script:LocalModel (created/recreated after confirmation)"
             Write-Host '  Tools: advertised locally; structured tool use is tested next'
         } else {
-            $remoteInfo = Get-RemoteOllamaModelInfo $script:Model
             if ($remoteInfo.ContextLength -lt $script:Context) {
                 throw "Exact tag $($remoteInfo.Model) advertises $($remoteInfo.ContextLength) context tokens, below the requested $script:Context. No model was downloaded."
             }

@@ -32,14 +32,12 @@ bash ./scripts/setup-local-ai.sh
 2. **Ask Gemini what fits.** Review the hardware-only prompt and paste it into
    Gemini yourself. It includes RAM, CPU, GPU/known graphics memory and free
    model-storage space, not repository data. Nothing is sent automatically.
-   Obtain a tool-capable local Ollama Library tag, download link, expected
-   storage, practical context budget and smaller fallback. Supply missing GPU
-   memory from specifications if available; advice is not a performance
-   guarantee.
-3. **Get and check the model.** Enter the recommendation, storage estimate and
-   context budget. Before a large pull, the wizard verifies the exact registry
-   tag, actual layer size, GGUF context limit and free disk; a known 32K tag is
-   rejected before download. Installed models are reused without updating.
+   The wizard first verifies a small exact-tag catalog with 65K+ GGUF context;
+   Gemini must choose from that list or return `MODEL: NONE`. Supply missing
+   dedicated GPU memory from specifications if available.
+3. **Get and check the model.** Enter the exact listed tag, size and `65536`.
+   The wizard rejects out-of-catalog recommendations before a large pull, checks
+   free disk, and shows a final review. Installed models are reused without updating.
    It creates a `local-ai-...` context-budget model and checks a harmless
    structured tool call. Compatible manually downloaded GGUF files have a
    guided import alternative. Start Ollama when prompted if needed.

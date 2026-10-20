@@ -30,15 +30,15 @@ override managed controls.
    Downloads show the app name, MB/GB, percentage when available, and speed.
    Ollama includes GPU libraries: allow 4 GB installed, plus separate model space.
 2. **Ask Gemini what fits.** Review and paste the hardware-only prompt into
-   Gemini yourself; nothing is sent automatically. It requests a tool-capable
-   local model, exact Ollama name and link, storage size, context budget
-   and smaller fallback. The prompt is saved in **Documents/Local-AI-Gemini-Prompt.txt**.
-   A recommendation is not a performance guarantee.
+   Gemini yourself; nothing is sent automatically. Before creating the prompt,
+   the wizard checks a small candidate catalog and includes only exact tags with
+   verified 65K+ GGUF context metadata. Gemini must choose one of those exact
+   entries or return `MODEL: NONE`; it no longer decides whether a tag is eligible.
+   The prompt is saved in **Documents/Local-AI-Gemini-Prompt.txt**.
 3. **Let the wizard verify and download it.** Paste Gemini's three top lines in
-   order: exact model tag, estimated size and context. Before any large pull,
-   the wizard checks the exact Ollama registry tag, actual layer size and GGUF
-   context limit. It rejects a 32K model before downloading it, checks free
-   disk, and shows a final review. Installed models are reused without updating.
+   order: exact model tag, listed size and `65536`. The wizard rejects anything
+   outside the verified catalog, checks free disk, and shows a final review.
+   Installed models are reused without updating.
    After download, the model appears in Ollama Desktop automatically. The wizard
    then checks advertised tools, runs a harmless structured tool-call test, and
    creates a `local-ai-...` model fixed to your chosen context.

@@ -205,11 +205,28 @@ hardware_prompt() {
         fi
     fi
     free_gib=$(free_kib | awk '{printf "%.1f", $1/1048576}')
+    build_verified_candidate_catalog
     {
         printf 'Recommend a practical LOCAL Ollama coding model for VS Code Agent mode.\n'
         printf 'OS: %s %s; architecture: %s\nCPU: %s\nRAM: %s\nGPU: %s\nGPU memory: %s\nAcceleration: %s\nFree model-volume space: %s GiB\n' \
             "$OS" "$OS_VERSION" "$ARCH" "$cpu" "$ram" "$gpu" "$vram" "$acceleration" "$free_gib"
+        printf '\nWIZARD-VERIFIED EXACT-TAG CANDIDATES:\n'
+        awk -F '\t' '{printf "- %s | DOWNLOAD_GIB %.1f | VERIFIED_CONTEXT_TOKENS %s\n", $1, $2/1073741824, $3}' "$VERIFIED_CANDIDATES_FILE"
         cat <<'PROMPT'
+
+These are the ONLY allowed Ollama Library recommendations for this run. The
+wizard read each exact tag's registry layers and GGUF context metadata directly.
+Choose MODEL exactly as written from this list, or use MODEL: NONE. Do not output
+another tag, alias, quantization, family member or Hugging Face model in the
+copy-back block. Repeat that candidate's DOWNLOAD_GIB value. Output
+CONTEXT_TOKENS: 65536 exactly; the verified context is the supported ceiling,
+not the requested allocation. Tool use is still unverified until the wizard's
+post-download local metadata and structured tool-call checks pass.
+
+TOOL CALLING STATUS:
+The shortlist is limited to models currently presented as tool-capable by
+Ollama, but that label is not proof. Do not claim success; the wizard must see
+an actual structured Ollama API tool_calls response from the downloaded exact tag.
 
 REQUIRED RESPONSE FORMAT: Start your response with this copy-back block, before
 any greeting, explanation, heading, or analysis. Replace placeholders with values:
@@ -222,23 +239,15 @@ Put ALL analysis, links, caveats and fallback choices
 AFTER this block. Do not invent a runnable recommendation if none is suitable:
 use MODEL: NONE and explain the blocker afterward.
 
-Use current official sources and provide links, not an assumed universal optimum.
-Recommend a primary and smaller fallback with reliable TOOL CALLING, exact LOCAL
-Ollama Library tag, model-page/download link, quantization, download size in GiB,
-license/commercial-use caveats, realistic speed expectations, and memory headroom
-for OS, VS Code, model weights AND KV cache. Account for shared versus dedicated
-memory; do not add GPUs' VRAM together. Recommend a practical context size for
-agents and explain the quality/speed tradeoff. Do not suggest cloud inference.
-Require evidence of structured Ollama API tool_calls for the exact recommended
-variant/template, not just coding benchmarks, a tools label, or JSON in chat text.
-If exact-variant tool behavior is unverified, state that prominently after the
-copy-back block; do not promise VS Code Agent compatibility.
+Compare ONLY the verified candidates above and explain which best fits this
+hardware. Recommend a primary and smaller fallback from that same list, with
+official model-page links, license/commercial-use caveats, realistic speed
+expectations, and memory headroom for OS, VS Code, model weights AND KV cache.
+Account for shared versus dedicated memory; do not add GPUs' VRAM together.
+Do not suggest cloud inference. Do not claim structured tool calling is verified:
+the wizard will test the exact downloaded model locally.
 For integrated or unified-memory GPUs, treat RAM as one physical pool. Do not add
 shared graphics memory to RAM as extra capacity or infer a fixed GPU reservation.
-Treat DOWNLOAD_GIB as an estimate only. The wizard independently checks the exact
-tag's registry layers and GGUF context metadata before any Ollama Library download.
-Do not infer an exact tag's context from family-level claims, a different quantization,
-or a model card alone. Cite the exact Ollama tag page and the source for context claims.
 MANDATORY FOR THIS SETUP: We need at least 65536 tokens of context for the
 VS Code Ollama extension. Recommend only models whose supported context window
 is at least 65536 AND whose weights plus KV cache at that context fit this
@@ -319,6 +328,43 @@ remote_model_preflight() {
         fail "The exact-tag GGUF metadata did not expose a context limit. No model was downloaded."
     REGISTRY_MODEL=$canonical
 }
+candidate_models() {
+    printf '%s\n' \
+        'llama3.1:8b' \
+        'mistral-nemo:12b' \
+        'gpt-oss:20b' \
+        'devstral:24b' \
+        'qwen3-coder:30b'
+}
+build_verified_candidate_catalog() {
+    local candidate line
+    VERIFIED_CANDIDATES_FILE="$WORK/verified-candidates.tsv"
+    : > "$VERIFIED_CANDIDATES_FILE"
+    while IFS= read -r candidate; do
+        if line=$( (
+            MODEL=$candidate
+            remote_model_preflight
+            [ "$REGISTRY_CONTEXT" -ge 65536 ]
+            printf '%s\t%s\t%s' "$REGISTRY_MODEL" "$REGISTRY_BYTES" "$REGISTRY_CONTEXT"
+        ) 2>/dev/null); then
+            printf '%s\n' "$line" >> "$VERIFIED_CANDIDATES_FILE"
+        else
+            printf 'WARNING: Skipped candidate %s because exact-tag preflight failed.\n' "$candidate"
+        fi
+    done < <(candidate_models)
+    [ -s "$VERIFIED_CANDIDATES_FILE" ] ||
+        fail "No exact-tag candidate could be verified from the Ollama registry. Check the connection and rerun; no model was downloaded."
+}
+verified_candidate_info() {
+    local wanted line
+    wanted=$(canonical_model "$1")
+    [ -n "${VERIFIED_CANDIDATES_FILE:-}" ] && [ -s "$VERIFIED_CANDIDATES_FILE" ] ||
+        fail "The verified candidate catalog is missing. Rerun the wizard; no model was downloaded."
+    line=$(awk -F '\t' -v wanted="$wanted" '$1 == wanted {print; exit}' "$VERIFIED_CANDIDATES_FILE")
+    [ -n "$line" ] ||
+        fail "Model $wanted was not in the wizard-verified candidate list given to Gemini. Use an exact listed tag or rerun for a fresh catalog. No model was downloaded."
+    IFS=$'\t' read -r REGISTRY_MODEL REGISTRY_BYTES REGISTRY_CONTEXT <<< "$line"
+}
 fetch_local_model_metadata() {
     "$JQ" -n --arg model "$MODEL" '{model:$model}' > "$WORK/show-request.json"
     api show -H 'Content-Type: application/json' --data-binary "@$WORK/show-request.json" > "$WORK/show.json"
@@ -376,6 +422,7 @@ choose_model() {
     CONTEXT=$((10#$context))
     LOCAL_MODEL="local-ai-${MODEL//:/-}"
     if [ "$source" = 1 ]; then
+        verified_candidate_info "$MODEL"
         if model_installed "$MODEL"; then
             installed=true
             fetch_local_model_metadata
@@ -386,7 +433,6 @@ choose_model() {
             printf '  VS Code alias: %s (created/recreated after confirmation)\n' "$LOCAL_MODEL"
             printf '  Tools: advertised locally; structured tool use is tested next\n'
         else
-            remote_model_preflight
             [ "$REGISTRY_CONTEXT" -ge "$CONTEXT" ] ||
                 fail "Exact tag $REGISTRY_MODEL advertises $REGISTRY_CONTEXT context tokens, below the requested $CONTEXT. No model was downloaded."
             available=$(free_kib)

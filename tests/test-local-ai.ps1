@@ -107,6 +107,22 @@ function Get-RemoteOllamaModelInfo([string]$Name) {
         ContextLength = $context
     }
 }
+function Get-VerifiedCandidateCatalog {
+    $items = @(
+        [pscustomobject]@{ Model = 'llama3.1:8b'; DownloadBytes = 5GB; ContextLength = 131072 },
+        [pscustomobject]@{ Model = 'mistral-nemo:12b'; DownloadBytes = 7GB; ContextLength = 1024000 }
+    )
+    $script:VerifiedCandidates = @{}
+    foreach ($item in $items) { $script:VerifiedCandidates[$item.Model] = $item }
+    return $items
+}
+function Get-VerifiedCandidateInfo([string]$Name) {
+    $canonical = Get-CanonicalModelName $Name
+    if ($canonical -notin @('model:latest', 'model:q4')) {
+        throw "Model $canonical was not in the wizard-verified candidate list given to Gemini. No model was downloaded."
+    }
+    return Get-RemoteOllamaModelInfo $Name
+}
 function Get-CimInstance([string]$ClassName, [string[]]$Property) {
     switch ($ClassName) {
         'Win32_OperatingSystem' { return [pscustomobject]@{ Caption = 'Fixture Windows'; Version = '10.0.22631'; CSName = 'DO-NOT-SHARE-HOST' } }
@@ -166,7 +182,10 @@ try {
         Assert-True ($text -match 'TOOL CALLING') 'No tool capability requirement'
         Assert-True ($text -match '(?m)^MODEL: .+\r?\nDOWNLOAD_GIB: .+\r?\nCONTEXT_TOKENS: ') 'Missing ordered copy-back block'
         Assert-True ($text -match 'before\r?\nany greeting') 'Copy-back block is not required first'
-        Assert-True ($text -match 'structured Ollama API tool_calls') 'Missing structured tool-call evidence requirement'
+        Assert-True ($text.Contains('ONLY allowed Ollama Library recommendations')) 'Gemini is not restricted to the verified list'
+        Assert-True ($text.Contains('llama3.1:8b') -and $text.Contains('mistral-nemo:12b')) 'Verified candidates missing from prompt'
+        Assert-True ($text -notmatch 'qwen2\.5-coder') 'Known ineligible Qwen tag leaked into candidate prompt'
+        Assert-True ($text.Contains('CONTEXT_TOKENS: 65536 exactly')) 'Gemini can still choose a different requested context'
         Assert-True ($text.Contains('up to 50% of installed RAM (16 GiB)')) 'Missing RAM-derived iGPU planning ceiling'
         Assert-True ($text.Contains('NOT a fixed reservation')) 'Shared memory described as fixed'
         Assert-True ($text.Contains('Do not infer a BIOS carve-out')) 'Missing anti-inference memory rule'
@@ -247,6 +266,12 @@ try {
         Select-LocalModel
         Assert-True ($script:Context -eq 65536) 'Default context is not 65536'
         $script:Mode = 'ok'
+    }
+    Test-Case 'Out-of-catalog Gemini recommendation is rejected before pull' {
+        $script:Calls.Clear()
+        Set-Answers @('1', 'qwen2.5-coder:14b', '9', '', 'y')
+        Assert-Throws { Select-LocalModel } 'not in the wizard-verified candidate list'
+        Assert-True (@($script:Calls | Where-Object { $_.Arguments[0] -eq 'pull' }).Count -eq 0) 'Pulled an out-of-catalog recommendation'
     }
     Test-Case 'Installed exact model is reused without pull' {
         $script:InstalledModel = 'model:q4'
