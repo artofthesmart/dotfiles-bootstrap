@@ -13,7 +13,7 @@ confirm() {
     case "$ANSWER" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
 }
 download() {
-    curl --fail --location --show-error --proto '=https' --tlsv1.2 \
+    curl --fail --location --show-error --proto '=https' --proto-redir '=https' --tlsv1.2 \
         --connect-timeout 20 --max-time 1800 "$1" -o "$2"
 }
 cleanup() { [ -z "${WORK:-}" ] || rm -rf -- "$WORK"; }
@@ -301,7 +301,7 @@ gguf_context_from_file() {
     esac
 }
 registry_fetch() {
-    curl --fail --location --silent --show-error --proto '=https' --tlsv1.2 \
+    curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https' --tlsv1.2 \
         --connect-timeout 20 --max-time 60 "$@"
 }
 remote_model_preflight() {
@@ -505,8 +505,10 @@ connect_code() {
     printf '\nGitHub Copilot Chat is bundled with this supported VS Code version.\n'
     printf 'Installing the official Ollama extension only for the Local AI profile.\n'
     confirm "Create/reuse Local AI and install Ollama.ollama" || fail "Profile setup cancelled."
-    "$CODE" --profile "Local AI" --install-extension Ollama.ollama
-    "$CODE" --profile "Local AI" --list-extensions > "$WORK/extensions.txt"
+    "$CODE" --profile "Local AI" --install-extension Ollama.ollama ||
+        fail "VS Code could not install Ollama.ollama in the Local AI profile."
+    "$CODE" --profile "Local AI" --list-extensions > "$WORK/extensions.txt" ||
+        fail "VS Code could not list extensions in the Local AI profile."
     grep -qi '^Ollama.ollama$' "$WORK/extensions.txt" ||
         fail "The Ollama extension was not installed in the Local AI profile."
     local repo

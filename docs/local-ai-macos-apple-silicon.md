@@ -12,7 +12,7 @@ gigabytes. GPU and CPU share your Mac's memory: 16 GB of unified memory does
 **not** mean 16 GB of RAM plus another 16 GB of graphics memory.
 
 Download this repository from GitHub using **Code > Download ZIP**, extract it,
-and open Terminal in the extracted folder. Alternatively, use your existing
+and open Terminal in the extracted folder. Alternatively, use your
 checkout. Inspect the script before running it as your normal user:
 
 ```sh
@@ -28,12 +28,12 @@ bash ./scripts/setup-local-ai.sh
    private installation of the jq JSON utility; no Python or Homebrew is needed.
 2. **Choose a sensible model.** Review the displayed hardware-only prompt, then
    paste it into Gemini yourself. Nothing is sent automatically. The wizard
-   first checks a small exact-tag catalog and includes only entries with verified
+   first checks an exact-tag catalog and includes only entries with verified
    65K+ GGUF context metadata. Gemini must choose from that list or return
    `MODEL: NONE`; it still compares hardware fit and suggests a smaller fallback.
 3. **Verify and download.** Paste Gemini's exact listed model, size and `65536`
    into the wizard. Out-of-catalog tags are rejected before download. It checks
-   free disk and shows a final review. Already-installed models are
+   free disk and shows a review. Already-installed models are
    reused without updating. The downloaded model also appears in Ollama.
    The wizard checks advertised tools and a harmless structured tool call.
 4. **Open your repository.** Copilot Chat is bundled with supported VS Code.
@@ -41,7 +41,7 @@ bash ./scripts/setup-local-ai.sh
    profile and opens your existing checkout.
    Follow its final instructions: select **Agent**, explicitly choose your
    `local-ai-...` Ollama model, and set the two utility-model settings to local
-   models too. Approve tools individually and review resulting changes.
+   models too. Approve tools individually and review changes.
 
 ## Switch local or cloud
 

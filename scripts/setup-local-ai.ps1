@@ -13,7 +13,7 @@ function Read-Choice([string]$Message) {
 function Confirm-Step([string]$Message) {
     return (Read-Choice "$Message [y/N]") -match '^(y|yes)$'
 }
-function Invoke-Native([string]$File, [string[]]$Arguments) {
+function Invoke-NativeOutput([string]$File, [string[]]$Arguments) {
     $previousPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = 'Continue'
@@ -22,12 +22,20 @@ function Invoke-Native([string]$File, [string[]]$Arguments) {
     } finally {
         $ErrorActionPreference = $previousPreference
     }
-    foreach ($line in $output) { Write-Host ([string]$line) }
     if ($exitCode -ne 0) {
         $command = (@($File) + $Arguments) -join ' '
         $detail = @($output | ForEach-Object { [string]$_ }) -join "`n"
         if ($detail) { throw "Command failed (exit $exitCode): $command`n$detail" }
         throw "Command failed (exit $exitCode): $command. Resolve the error and rerun."
+    }
+    return @($output | ForEach-Object { [string]$_ })
+}
+function Invoke-Native([string]$File, [string[]]$Arguments) {
+    foreach ($line in @(Invoke-NativeOutput $File $Arguments)) { Write-Host $line }
+}
+function Assert-HttpsResponse($Response) {
+    if ($null -eq $Response.ResponseUri -or $Response.ResponseUri.Scheme -ne 'https') {
+        throw 'An HTTPS request redirected to a non-HTTPS destination. Refusing the response.'
     }
 }
 function Get-Application([string]$Name, [string[]]$Candidates) {
@@ -73,6 +81,7 @@ function Save-Download([string]$Uri, [string]$Destination, [string]$Name = 'inst
     try {
         Write-Progress -Id 1 -Activity "Downloading $Name" -Status 'Connecting to the download server...' -PercentComplete -1
         $response = (New-DownloadRequest ([uri]$Uri)).GetResponse()
+        Assert-HttpsResponse $response
         $total = $response.ContentLength
         if ($total -gt 0) { Write-Host "Download size: $(Format-DownloadSize $total). The installer opens when this finishes." }
         else { Write-Host 'The server did not report a total size. Showing the amount downloaded instead.' }
@@ -130,8 +139,8 @@ function Install-Applications {
         $script:Code = Get-Code
         if (-not $script:Code) { throw 'VS Code was not found after installation. Finish installing it and rerun.' }
     } else { Write-Host 'VS Code is already installed; no download needed.' -ForegroundColor Green }
-    $versionLines = @(& $script:Code --version)
-    if ($LASTEXITCODE -ne 0 -or $versionLines.Count -eq 0) { throw 'Cannot read VS Code version.' }
+    $versionLines = @(Invoke-NativeOutput $script:Code @('--version'))
+    if ($versionLines.Count -eq 0) { throw 'Cannot read VS Code version.' }
     $version = [version]($versionLines[0].Trim())
     if ($version -lt [version]'1.127.0') { throw 'Update VS Code to 1.127+ for the official Ollama extension, then rerun.' }
     $script:Ollama = Get-Ollama
@@ -357,6 +366,7 @@ function Get-HttpsBytes([string]$Uri, [string]$Accept = '', [int]$RangeEnd = -1)
     if ($RangeEnd -ge 0) { $request.AddRange(0, $RangeEnd) }
     $response = $request.GetResponse()
     try {
+        Assert-HttpsResponse $response
         if ($RangeEnd -ge 0 -and
             ([int]$response.StatusCode -ne 206 -or $response.ContentLength -lt 0 -or $response.ContentLength -gt ($RangeEnd + 1))) {
             throw 'Registry did not honor the bounded GGUF metadata request.'
@@ -707,8 +717,8 @@ function Connect-Code {
     Write-Host 'GitHub Copilot Chat is bundled with this supported VS Code version; no marketplace install is needed.'
     if (-not (Confirm-Step 'Create/reuse Local AI and install the official Ollama.ollama extension only for that profile')) { throw 'Profile setup cancelled.' }
     Invoke-Native $script:Code @('--profile', 'Local AI', '--install-extension', 'Ollama.ollama')
-    $extensions = @(& $script:Code --profile 'Local AI' --list-extensions)
-    if ($LASTEXITCODE -ne 0 -or $extensions -notcontains 'Ollama.ollama') {
+    $extensions = @(Invoke-NativeOutput $script:Code @('--profile', 'Local AI', '--list-extensions'))
+    if ($extensions -notcontains 'Ollama.ollama') {
         throw 'The Ollama extension was not installed in the Local AI profile.'
     }
     $repo = Read-Choice 'Full path to an existing locally checked-out repository'

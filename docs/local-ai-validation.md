@@ -26,7 +26,8 @@ python3 -m unittest discover -s tests -p 'test_windows_download.py' -v
 
 This covers readable app-labelled download progress, known and unknown total
 sizes, byte-for-byte transfer, HTTP failures, truncated-transfer cleanup, and
-HTTPS source validation. It downloads fixtures, not actual installers.
+HTTPS source validation. HTTPS redirect-downgrade rejection is covered by the
+mocked script suites. It downloads fixtures, not actual installers.
 The Windows wizard uses built-in progress rendering and needs no UI module.
 
 On native Windows PowerShell:
@@ -47,8 +48,9 @@ exact-tag registry preflight, pre-download context rejection, installed-model
 reuse, context-budget aliases, storage limits, explicit download/HTTP/tool
 failures, cloud metadata rejection, hardware field allowlisting and profile-scoped
 commands. It also verifies that the wizard does not try to reinstall bundled
-Copilot Chat and installs only the Ollama extension into Local AI. Bash covers
-translated Macs, Intel warnings, unsupported
+Copilot Chat, installs only the Ollama extension into Local AI, rejects
+non-HTTPS redirect destinations, and preserves native stderr and exit codes for
+diagnosis. Bash covers translated Macs, Intel warnings, unsupported
 OS/architecture, old VS Code, failed elevation, existing apps outside PATH,
 repeated runs and preservation of default settings.
 
@@ -177,7 +179,12 @@ For each platform, exercise these steps:
   enables its built-in extension with automatic updates. Do not pass that ID to
   `--install-extension`; current VS Code can return exit 1 for a built-in
   extension. The wizard installs only `Ollama.ollama` into Local AI. Native
-  command failures now include the command's captured output for diagnosis.
+  command failures now include the command, exit code, stdout and stderr for
+  diagnosis, including version and extension-list checks.
+- **Download transport:** application installers and Ollama registry metadata
+  must begin and remain on HTTPS across redirects. A downgrade to HTTP is
+  rejected. This protects transport integrity but does not pin release content;
+  Windows installer signatures provide an additional publisher check.
 - **Missing model in VS Code:** verify Ollama is responding at
   `http://127.0.0.1:11434`, run **Ollama: Refresh Models**, then
   **Ollama: Diagnose Models**. Verify VS Code 1.127+ and extension versions.
