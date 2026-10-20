@@ -71,6 +71,8 @@ function New-DownloadRequest([uri]$Uri) {
     $request.ReadWriteTimeout = 3000
     return $request
 }
+# The local fixture is HTTP; redirect security is unit-tested separately.
+function Assert-HttpsResponse($Response) {}
 $exitCode = 0
 try {
     Save-Download $env:DOWNLOAD_URI $env:DESTINATION 'Ollama'

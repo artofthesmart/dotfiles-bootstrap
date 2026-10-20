@@ -13,7 +13,7 @@ confirm() {
     case "$ANSWER" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
 }
 download() {
-    curl --fail --location --show-error --proto '=https' --tlsv1.2 \
+    curl --fail --location --show-error --proto '=https' --proto-redir '=https' --tlsv1.2 \
         --connect-timeout 20 --max-time 1800 "$1" -o "$2"
 }
 cleanup() { [ -z "${WORK:-}" ] || rm -rf -- "$WORK"; }
@@ -301,7 +301,7 @@ gguf_context_from_file() {
     esac
 }
 registry_fetch() {
-    curl --fail --location --silent --show-error --proto '=https' --tlsv1.2 \
+    curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https' --tlsv1.2 \
         --connect-timeout 20 --max-time 60 "$@"
 }
 remote_model_preflight() {
@@ -502,13 +502,15 @@ check_model() {
     printf 'CPU-only offload can be slow even if a GPU is installed. No GPU drivers were changed.\n'
 }
 connect_code() {
-    printf '\nInstalling official chat and Ollama extensions only for the Local AI profile.\n'
-    confirm "Create/reuse Local AI and install GitHub.copilot-chat and Ollama.ollama" || fail "Profile setup cancelled."
-    "$CODE" --profile "Local AI" --install-extension GitHub.copilot-chat
-    "$CODE" --profile "Local AI" --install-extension Ollama.ollama
-    "$CODE" --profile "Local AI" --list-extensions > "$WORK/extensions.txt"
-    grep -qi '^GitHub.copilot-chat$' "$WORK/extensions.txt" &&
-        grep -qi '^Ollama.ollama$' "$WORK/extensions.txt" || fail "Required profile extensions were not installed."
+    printf '\nGitHub Copilot Chat is bundled with this supported VS Code version.\n'
+    printf 'Installing the official Ollama extension only for the Local AI profile.\n'
+    confirm "Create/reuse Local AI and install Ollama.ollama" || fail "Profile setup cancelled."
+    "$CODE" --profile "Local AI" --install-extension Ollama.ollama ||
+        fail "VS Code could not install Ollama.ollama in the Local AI profile."
+    "$CODE" --profile "Local AI" --list-extensions > "$WORK/extensions.txt" ||
+        fail "VS Code could not list extensions in the Local AI profile."
+    grep -qi '^Ollama.ollama$' "$WORK/extensions.txt" ||
+        fail "The Ollama extension was not installed in the Local AI profile."
     local repo
     ask "Full path to an existing locally checked-out repository"
     repo=$ANSWER
@@ -520,7 +522,7 @@ connect_code() {
 
 Finish in the Local AI window (these UI steps are not automated):
 1. Trust the workspace only if you trust this repository.
-2. Open Chat, select Agent mode, then select $LOCAL_MODEL under Ollama.
+2. Open the built-in Copilot Chat, select Agent mode, then select $LOCAL_MODEL under Ollama.
    Do NOT select Auto or a cloud model. If missing, run "Ollama: Refresh Models"
    or "Ollama: Diagnose Models" from the Command Palette.
 3. In this profile's Settings, enable chat.agentHost.byokModels.enabled if

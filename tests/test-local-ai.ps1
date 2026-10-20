@@ -61,6 +61,7 @@ function Set-Answers([string[]]$Values) {
 }
 function Invoke-Native([string]$File, [string[]]$Arguments) {
     $script:Calls.Add(@{ File = $File; Arguments = $Arguments })
+    if ($Arguments -contains 'GitHub.copilot-chat') { throw 'Bundled Copilot Chat must not be installed.' }
     if ($script:Mode -eq 'pull-fails' -and $Arguments[0] -eq 'pull') { throw 'Download failed (fixture).' }
 }
 function Invoke-OllamaApi([string]$Endpoint, $Body = $null) {
@@ -170,6 +171,16 @@ try {
     Test-Case 'Cancelled prompt is explicit' {
         Set-Answers @('q')
         Assert-Throws { Read-Choice 'fixture' } 'cancelled'
+    }
+    Test-Case 'HTTPS redirect and native failure details are enforced' {
+        Assert-Throws {
+            Assert-HttpsResponse ([pscustomobject]@{ ResponseUri = [uri]'http://example.invalid/file' })
+        } 'non-HTTPS destination'
+        Assert-HttpsResponse ([pscustomobject]@{ ResponseUri = [uri]'https://example.invalid/file' })
+        $executable = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+        Assert-Throws {
+            Invoke-NativeOutput $executable @('-NoProfile', '-Command', '[Console]::Error.WriteLine("fixture stderr"); exit 7')
+        } 'exit 7[\s\S]*fixture stderr'
     }
     Test-Case 'Hardware prompt is allowlisted and unknown VRAM stays unknown' {
         $script:Questions.Clear()
@@ -335,13 +346,21 @@ try {
     }
     Test-Case 'Profile scope is explicit for every code CLI operation' {
         $source = [IO.File]::ReadAllText($scriptPath)
-        Assert-True ($source -match "'--profile', 'Local AI', '--install-extension', 'GitHub.copilot-chat'") 'Chat extension not profile-scoped'
+        Assert-True ($source -notmatch "'--install-extension', 'GitHub.copilot-chat'") 'Tried to install bundled Copilot Chat from the marketplace'
         Assert-True ($source -match "'--profile', 'Local AI', '--install-extension', 'Ollama.ollama'") 'Ollama extension not profile-scoped'
         Assert-True ($source -match "'--new-window', '--profile', 'Local AI', \`$repo") 'Repository launch not profile-scoped'
         Assert-True ($source -notmatch 'Invoke-Expression|Set-ExecutionPolicy|AdapterRAM\s*=') 'Unexpected unsafe/global behavior'
         Assert-True ($source.Contains('checks the exact Ollama tag')) 'Missing exact-tag preflight explanation'
         Assert-True ($source.Contains('reused without pulling it again')) 'Missing installed-model reuse explanation'
         Assert-True ($source.Contains('[int]$response.StatusCode -ne 206')) 'Bounded registry range response is not enforced'
+    }
+    Test-Case 'VS Code extension-list failure retains native diagnostics' {
+        function Invoke-NativeOutput([string]$File, [string[]]$Arguments) {
+            Assert-True ($Arguments -contains '--list-extensions') 'Unexpected captured-output command'
+            throw "Command failed (exit 9): fixture-code --list-extensions`nfixture extension list failure"
+        }
+        Set-Answers @('y')
+        Assert-Throws { Connect-Code } 'exit 9[\s\S]*fixture extension list failure'
     }
     Test-Case 'Installer signature mismatch rejected' {
         function Get-AuthenticodeSignature { return [pscustomobject]@{ Status = 'Valid'; SignerCertificate = [pscustomobject]@{ Subject = 'Untrusted publisher' } } }
@@ -357,7 +376,7 @@ try {
         $cli = Join-Path $script:Fixture 'fixture-code.ps1'
         [IO.File]::WriteAllText($cli, @'
 if ($args -contains '--version') { Write-Output '1.127.0' }
-if ($args -contains '--list-extensions') { Write-Output 'GitHub.copilot-chat'; Write-Output 'Ollama.ollama' }
+if ($args -contains '--list-extensions') { Write-Output 'Ollama.ollama' }
 $global:LASTEXITCODE = 0
 '@)
         function Get-Code { return $cli }
@@ -381,7 +400,7 @@ $global:LASTEXITCODE = 0
         }
         Assert-True ([IO.File]::ReadAllText($defaultSettings) -eq '{"keep":"unchanged"}') 'Existing settings changed'
         $codeCalls = @($script:Calls | Where-Object { $_.File -eq $cli })
-        Assert-True ($codeCalls.Count -eq 6) 'Missing extension/launch calls'
+        Assert-True ($codeCalls.Count -eq 4) 'Missing extension/launch calls'
         foreach ($call in $codeCalls) {
             Assert-True ($call.Arguments -contains '--profile' -and $call.Arguments -contains 'Local AI') 'Unscoped profile operation'
         }

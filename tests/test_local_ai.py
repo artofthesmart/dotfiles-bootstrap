@@ -79,8 +79,16 @@ if name == "id":
 elif name == "code":
     if "--version" in args:
         print(os.environ.get("CODE_VERSION", "1.127.0") + "\nfixture\nx64")
+    elif os.environ.get("FAIL_CODE") == "install" and "--install-extension" in args:
+        print("fixture extension install failure", file=sys.stderr)
+        sys.exit(9)
+    elif os.environ.get("FAIL_CODE") == "list" and "--list-extensions" in args:
+        print("fixture extension list failure", file=sys.stderr)
+        sys.exit(9)
+    elif "--install-extension" in args and "GitHub.copilot-chat" in args:
+        print("built-in extension cannot be installed", file=sys.stderr)
+        sys.exit(1)
     elif "--list-extensions" in args:
-        print("GitHub.copilot-chat")
         if not os.environ.get("MISSING_EXTENSION"):
             print("Ollama.ollama")
 elif name == "ollama":
@@ -400,6 +408,17 @@ class WizardTests(unittest.TestCase):
         result = self.run_shell("connect_code", "y\n")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("not installed", result.stderr)
+        for mode, message in [
+            ("install", "could not install"),
+            ("list", "could not list extensions"),
+        ]:
+            with self.subTest(mode=mode):
+                self.env.pop("MISSING_EXTENSION", None)
+                self.env["FAIL_CODE"] = mode
+                result = self.run_shell("connect_code", "y\n")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+                self.env.pop("FAIL_CODE")
 
     def test_existing_apps_outside_path_and_private_jq(self):
         self.env["PATH"] = "/usr/bin:/bin"
@@ -438,6 +457,10 @@ class WizardTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.calls("code"), [])
 
+    def test_https_downloads_restrict_redirect_protocols(self):
+        source = SCRIPT.read_text()
+        self.assertGreaterEqual(source.count("--proto-redir '=https'"), 2)
+
     def test_mac_download_targets_and_minimum_version_boundary(self):
         for arch, target in [("amd64", "/darwin/stable"), ("arm64", "/darwin-arm64/stable")]:
             command = (
@@ -464,6 +487,7 @@ class WizardTests(unittest.TestCase):
         self.assertEqual(settings.read_text(), '{"keep": "unchanged"}')
         for row in self.calls("code"):
             self.assertEqual(row[row.index("--profile") + 1], "Local AI")
+        self.assertFalse(any("GitHub.copilot-chat" in row for row in self.calls("code")))
         self.assertIn(str(self.repo), self.calls("code")[-1])
 
     def test_full_interactive_flow_with_fake_api(self):

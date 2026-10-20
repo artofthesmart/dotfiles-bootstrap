@@ -1,6 +1,6 @@
 # Installer sources and update guide
 
-Last reviewed: 2026-10-19
+Last reviewed: 2026-10-20
 
 This inventory covers `bootstrap.sh`, `setup.py`, `setup_termux.sh`, and the
 independent local-AI wizards under `scripts/`.
@@ -127,8 +127,9 @@ mocked test success is not proof of platform compatibility.
 | Ollama `.dmg`, Windows user installer, Linux installer downloaded for review before execution | [macOS](https://docs.ollama.com/macos), [Windows](https://docs.ollama.com/windows), [Linux](https://docs.ollama.com/linux), [official releases](https://github.com/ollama/ollama/releases) |
 | Official `Ollama.ollama` provider extension; current manifest requires VS Code 1.127+; default loopback discovery | [Ollama extension](https://github.com/ollama/ollama-vscode), [manifest](https://github.com/ollama/ollama-vscode/blob/main/package.json) |
 | Per-model `num_ctx` discovery and 65536-token recommendation for agents; this wizard enforces it as the minimum and checks reported model support | [Provider](https://github.com/ollama/ollama-vscode/blob/main/src/provider.ts), [context handling](https://github.com/ollama/ollama-vscode/blob/main/src/contextLength.ts) |
-| Official `GitHub.copilot-chat` extension | [Manifest](https://github.com/microsoft/vscode-copilot-chat/blob/main/package.json) |
+| VS Code 1.127+ bundles `GitHub.copilot-chat` and enables automatic built-in updates; the wizard must not reinstall it from the marketplace | [VS Code 1.127 product configuration](https://github.com/microsoft/vscode/blob/1.127.0/product.json), [bundled Copilot manifest](https://github.com/microsoft/vscode/blob/1.127.0/extensions/copilot/package.json), [upstream built-in install failure](https://github.com/microsoft/vscode/issues/327484) |
 | Windows download progress uses built-in `Write-Progress` with streamed .NET responses; no PowerShell 7 UI-module dependency | [Write-Progress](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/write-progress), [HTTP request timeouts](https://learn.microsoft.com/en-us/dotnet/api/system.net.httpwebrequest.readwritetimeout) |
+| Installer and registry requests require HTTPS initially and after redirects; Bash uses curl protocol restrictions and Windows validates the final response URI | [curl protocol restrictions](https://curl.se/docs/manpage.html#--proto-redir), [HttpWebResponse.ResponseUri](https://learn.microsoft.com/en-us/dotnet/api/system.net.httpwebresponse.responseuri) |
 | Named Local AI profile creation, profile-scoped installs and launch | [CLI](https://code.visualstudio.com/docs/configure/command-line), [profiles](https://code.visualstudio.com/docs/configure/profiles) |
 | BYOK agents, tool capability, utility models, deprecated built-in Ollama provider, account-dependent feature limits | [VS Code language models](https://code.visualstudio.com/docs/agent-customization/language-models) |
 | Local model pulls, GGUF import and context-budget aliases | [CLI](https://docs.ollama.com/cli), [import](https://docs.ollama.com/import), [Modelfile](https://docs.ollama.com/modelfile) |

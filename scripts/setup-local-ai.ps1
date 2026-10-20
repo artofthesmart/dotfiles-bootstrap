@@ -13,9 +13,30 @@ function Read-Choice([string]$Message) {
 function Confirm-Step([string]$Message) {
     return (Read-Choice "$Message [y/N]") -match '^(y|yes)$'
 }
+function Invoke-NativeOutput([string]$File, [string[]]$Arguments) {
+    $previousPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $output = @(& $File @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
+    if ($exitCode -ne 0) {
+        $command = (@($File) + $Arguments) -join ' '
+        $detail = @($output | ForEach-Object { [string]$_ }) -join "`n"
+        if ($detail) { throw "Command failed (exit $exitCode): $command`n$detail" }
+        throw "Command failed (exit $exitCode): $command. Resolve the error and rerun."
+    }
+    return @($output | ForEach-Object { [string]$_ })
+}
 function Invoke-Native([string]$File, [string[]]$Arguments) {
-    & $File @Arguments | Out-Host
-    if ($LASTEXITCODE -ne 0) { throw "$File failed (exit $LASTEXITCODE). Resolve the error and rerun." }
+    foreach ($line in @(Invoke-NativeOutput $File $Arguments)) { Write-Host $line }
+}
+function Assert-HttpsResponse($Response) {
+    if ($null -eq $Response.ResponseUri -or $Response.ResponseUri.Scheme -ne 'https') {
+        throw 'An HTTPS request redirected to a non-HTTPS destination. Refusing the response.'
+    }
 }
 function Get-Application([string]$Name, [string[]]$Candidates) {
     $command = Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue
@@ -60,6 +81,7 @@ function Save-Download([string]$Uri, [string]$Destination, [string]$Name = 'inst
     try {
         Write-Progress -Id 1 -Activity "Downloading $Name" -Status 'Connecting to the download server...' -PercentComplete -1
         $response = (New-DownloadRequest ([uri]$Uri)).GetResponse()
+        Assert-HttpsResponse $response
         $total = $response.ContentLength
         if ($total -gt 0) { Write-Host "Download size: $(Format-DownloadSize $total). The installer opens when this finishes." }
         else { Write-Host 'The server did not report a total size. Showing the amount downloaded instead.' }
@@ -117,8 +139,8 @@ function Install-Applications {
         $script:Code = Get-Code
         if (-not $script:Code) { throw 'VS Code was not found after installation. Finish installing it and rerun.' }
     } else { Write-Host 'VS Code is already installed; no download needed.' -ForegroundColor Green }
-    $versionLines = @(& $script:Code --version)
-    if ($LASTEXITCODE -ne 0 -or $versionLines.Count -eq 0) { throw 'Cannot read VS Code version.' }
+    $versionLines = @(Invoke-NativeOutput $script:Code @('--version'))
+    if ($versionLines.Count -eq 0) { throw 'Cannot read VS Code version.' }
     $version = [version]($versionLines[0].Trim())
     if ($version -lt [version]'1.127.0') { throw 'Update VS Code to 1.127+ for the official Ollama extension, then rerun.' }
     $script:Ollama = Get-Ollama
@@ -344,6 +366,7 @@ function Get-HttpsBytes([string]$Uri, [string]$Accept = '', [int]$RangeEnd = -1)
     if ($RangeEnd -ge 0) { $request.AddRange(0, $RangeEnd) }
     $response = $request.GetResponse()
     try {
+        Assert-HttpsResponse $response
         if ($RangeEnd -ge 0 -and
             ([int]$response.StatusCode -ne 206 -or $response.ContentLength -lt 0 -or $response.ContentLength -gt ($RangeEnd + 1))) {
             throw 'Registry did not honor the bounded GGUF metadata request.'
@@ -691,12 +714,12 @@ function Connect-Code {
     } else {
         Write-Warning 'Local tool use is UNVERIFIED. Test an approved edit in VS Code; choose another model if Agent tools fail.'
     }
-    if (-not (Confirm-Step 'Create/reuse Local AI and install official GitHub.copilot-chat and Ollama.ollama extensions only for that profile')) { throw 'Profile setup cancelled.' }
-    Invoke-Native $script:Code @('--profile', 'Local AI', '--install-extension', 'GitHub.copilot-chat')
+    Write-Host 'GitHub Copilot Chat is bundled with this supported VS Code version; no marketplace install is needed.'
+    if (-not (Confirm-Step 'Create/reuse Local AI and install the official Ollama.ollama extension only for that profile')) { throw 'Profile setup cancelled.' }
     Invoke-Native $script:Code @('--profile', 'Local AI', '--install-extension', 'Ollama.ollama')
-    $extensions = @(& $script:Code --profile 'Local AI' --list-extensions)
-    if ($LASTEXITCODE -ne 0 -or $extensions -notcontains 'GitHub.copilot-chat' -or $extensions -notcontains 'Ollama.ollama') {
-        throw 'Required profile extensions were not installed.'
+    $extensions = @(Invoke-NativeOutput $script:Code @('--profile', 'Local AI', '--list-extensions'))
+    if ($extensions -notcontains 'Ollama.ollama') {
+        throw 'The Ollama extension was not installed in the Local AI profile.'
     }
     $repo = Read-Choice 'Full path to an existing locally checked-out repository'
     if (-not [IO.Path]::IsPathRooted($repo) -or -not (Test-Path -LiteralPath $repo -PathType Container)) { throw 'Choose an existing absolute directory.' }
@@ -708,7 +731,7 @@ function Connect-Code {
 
 Finish in the Local AI window (these UI steps are not automated):
 1. Trust the workspace only if you trust this repository.
-2. Open Chat, select Agent mode, then $script:LocalModel under Ollama.
+2. Open the built-in Copilot Chat, select Agent mode, then $script:LocalModel under Ollama.
    Do NOT select Auto or a cloud model. If missing, use the Command Palette:
    Ollama: Refresh Models, or Ollama: Diagnose Models.
 3. In this profile's Settings, enable chat.agentHost.byokModels.enabled if
