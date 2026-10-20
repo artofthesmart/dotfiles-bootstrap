@@ -536,29 +536,39 @@ function Assert-LocalModelCompatible($Metadata, [int]$Context) {
     return $limit
 }
 function Select-LocalModel {
-    Write-Host "`nChoose a small, tool-capable model from https://ollama.com/library to run on this computer."
+    Write-Host "`nPaste Gemini's exact Ollama model tag or Hugging Face URL."
     Write-Host 'Gemini is advisory. Before downloading, this wizard checks the exact Ollama tag, registry size, and GGUF context metadata.'
     Write-Host 'If the model is already installed, it is checked and reused without pulling it again.'
-    $source = Read-Choice 'Model source: 1 = Ollama Library (recommended), 2 = import a downloaded Hugging Face GGUF'
+    $selection = Read-Choice 'MODEL: paste the exact Ollama model name/tag, or a huggingface.co URL for a GGUF import'
+    $source = '1'
     $gguf = $null
     $installed = $false
     $remoteInfo = $null
-    switch ($source) {
-        '1' { $script:Model = Read-Choice 'MODEL: paste the exact model name and tag from Gemini (without "ollama run")' }
-        '2' {
-            Write-Host 'Download a compatible single-file GGUF yourself. Check license, architecture, quantization and tool/chat-template support.'
-            $gguf = Read-Choice 'Full path to the downloaded single-file .gguf'
-            if (-not [IO.Path]::IsPathRooted($gguf) -or -not (Test-Path -LiteralPath $gguf -PathType Leaf) -or
-                [IO.Path]::GetExtension($gguf) -ine '.gguf' -or $gguf -match '[\r\n]') { throw 'Choose an existing absolute .gguf path.' }
-            $stream = [IO.File]::OpenRead($gguf)
-            try {
-                $bytes = New-Object byte[] 4
-                $count = $stream.Read($bytes, 0, 4)
-                if ($count -ne 4 -or [Text.Encoding]::ASCII.GetString($bytes) -cne 'GGUF') { throw 'The file is not a GGUF.' }
-            } finally { $stream.Dispose() }
-            $script:Model = Read-Choice 'Local name for this import (use a new name to preserve previous models)'
-        }
-        default { throw 'Choose 1 or 2.' }
+    if ($selection -match '^https://huggingface\.co/') {
+        $source = '2'
+        Write-Host 'Detected a Hugging Face source. Download a compatible single-file GGUF from that page yourself.'
+        Write-Host 'Check its license, architecture, quantization and tool/chat-template support; arbitrary models may not work.'
+        $gguf = Read-Choice 'Full path to the downloaded single-file .gguf'
+    } elseif ([IO.Path]::IsPathRooted($selection) -and [IO.Path]::GetExtension($selection) -ieq '.gguf') {
+        $source = '2'
+        $gguf = $selection
+        Write-Host 'Detected a local GGUF file.'
+    } elseif ($selection -match '^https?://') {
+        throw 'Only huggingface.co URLs are accepted for GGUF imports; otherwise paste an exact Ollama model name and tag.'
+    } else {
+        $script:Model = $selection
+        Write-Host 'Detected an Ollama Library model name.'
+    }
+    if ($source -eq '2') {
+        if (-not [IO.Path]::IsPathRooted($gguf) -or -not (Test-Path -LiteralPath $gguf -PathType Leaf) -or
+            [IO.Path]::GetExtension($gguf) -ine '.gguf' -or $gguf -match '[\r\n]') { throw 'Choose an existing absolute .gguf path.' }
+        $stream = [IO.File]::OpenRead($gguf)
+        try {
+            $bytes = New-Object byte[] 4
+            $count = $stream.Read($bytes, 0, 4)
+            if ($count -ne 4 -or [Text.Encoding]::ASCII.GetString($bytes) -cne 'GGUF') { throw 'The file is not a GGUF.' }
+        } finally { $stream.Dispose() }
+        $script:Model = Read-Choice 'Local name for this import (use a new name to preserve previous models)'
     }
     if ($script:Model -eq 'NONE') { throw 'Gemini found no suitable local model for this hardware at 65536+ context. Review its explanation; do not download an unsuitable model.' }
     if (-not (Test-ModelName $script:Model)) { throw 'Use a simple model[:tag], not a command, URL, namespace or cloud model.' }
@@ -708,6 +718,21 @@ function Confirm-LocalModelTools {
         }
     }
 }
+function Wait-CodeProfile([int]$Attempts = 15) {
+    $lastError = $null
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        try {
+            return @(Invoke-NativeOutput $script:Code @('--profile', 'Local AI', '--list-extensions'))
+        } catch {
+            $lastError = $_.Exception.Message
+            if ($attempt -lt $Attempts) {
+                if ($attempt -eq 1) { Write-Host 'Waiting for VS Code to finish creating the Local AI profile...' }
+                Start-Sleep -Seconds 1
+            }
+        }
+    }
+    throw "VS Code did not make the Local AI profile available after opening it. Last error:`n$lastError"
+}
 function Connect-Code {
     if ($script:ToolCheckPassed) {
         Write-Host 'The local tool-call check passed. VS Code Agent behavior still needs your confirmation.'
@@ -715,18 +740,23 @@ function Connect-Code {
         Write-Warning 'Local tool use is UNVERIFIED. Test an approved edit in VS Code; choose another model if Agent tools fail.'
     }
     Write-Host 'GitHub Copilot Chat is bundled with this supported VS Code version; no marketplace install is needed.'
-    if (-not (Confirm-Step 'Create/reuse Local AI and install the official Ollama.ollama extension only for that profile')) { throw 'Profile setup cancelled.' }
-    Invoke-Native $script:Code @('--profile', 'Local AI', '--install-extension', 'Ollama.ollama')
-    $extensions = @(Invoke-NativeOutput $script:Code @('--profile', 'Local AI', '--list-extensions'))
-    if ($extensions -notcontains 'Ollama.ollama') {
-        throw 'The Ollama extension was not installed in the Local AI profile.'
-    }
+    if (-not (Confirm-Step 'Open your repository in Local AI and install the official Ollama.ollama extension only for that profile')) { throw 'Profile setup cancelled.' }
     $repo = Read-Choice 'Full path to an existing locally checked-out repository'
     if (-not [IO.Path]::IsPathRooted($repo) -or -not (Test-Path -LiteralPath $repo -PathType Container)) { throw 'Choose an existing absolute directory.' }
     $git = Get-Command git.exe -CommandType Application -ErrorAction SilentlyContinue
     if (-not $git) { throw 'Git is required to verify the checkout. Install Git and rerun.' }
     Invoke-Native $git.Source @('-C', $repo, 'rev-parse', '--show-toplevel')
     Invoke-Native $script:Code @('--new-window', '--profile', 'Local AI', $repo)
+    $extensions = @(Wait-CodeProfile)
+    if ($extensions -contains 'Ollama.ollama') {
+        Write-Host 'The Ollama extension is already installed in Local AI; no reinstall needed.' -ForegroundColor Green
+    } else {
+        Invoke-Native $script:Code @('--profile', 'Local AI', '--install-extension', 'Ollama.ollama')
+        $extensions = @(Invoke-NativeOutput $script:Code @('--profile', 'Local AI', '--list-extensions'))
+    }
+    if ($extensions -notcontains 'Ollama.ollama') {
+        throw 'The Ollama extension was not installed in the Local AI profile.'
+    }
     Write-Host @"
 
 Finish in the Local AI window (these UI steps are not automated):
@@ -734,6 +764,7 @@ Finish in the Local AI window (these UI steps are not automated):
 2. Open the built-in Copilot Chat, select Agent mode, then $script:LocalModel under Ollama.
    Do NOT select Auto or a cloud model. If missing, use the Command Palette:
    Ollama: Refresh Models, or Ollama: Diagnose Models.
+   If those commands do not appear yet, run Developer: Reload Window once.
 3. In this profile's Settings, enable chat.agentHost.byokModels.enabled if
    required for the Copilot harness. Set chat.utilityModel and
    chat.utilitySmallModel to your local model using their model pickers.

@@ -221,10 +221,11 @@ try {
     }
     Test-Case 'Model acquisition creates context-budget alias' {
         $script:Questions.Clear()
-        Set-Answers @('1', 'model:q4', '4', '65536', 'y')
+        Set-Answers @('model:q4', '4', '65536', 'y')
         Select-LocalModel
         Assert-True ($script:LocalModel -eq 'local-ai-model-q4') 'Wrong alias'
         Assert-True ([IO.File]::ReadAllText((Join-Path $script:Work 'Modelfile')) -match 'num_ctx 65536') 'Missing context budget'
+        Assert-True (@($script:Questions | Where-Object { $_ -match '^Model source:' }).Count -eq 0) 'Still asks the user to classify the source'
         $fields = @($script:Questions | Where-Object { $_ -match '^(MODEL|DOWNLOAD_GIB|CONTEXT_TOKENS):' } |
             ForEach-Object { ($_ -split ':')[0] })
         Assert-True (($fields -join ',') -eq 'MODEL,DOWNLOAD_GIB,CONTEXT_TOKENS') 'Question order does not match Gemini copy-back order'
@@ -232,26 +233,28 @@ try {
     Test-Case 'Compatible GGUF file path containing spaces' {
         $gguf = Join-Path $script:Fixture 'weights with spaces.gguf'
         [IO.File]::WriteAllText($gguf, 'GGUFfixture')
-        Set-Answers @('2', $gguf, 'imported', '4', '', 'y')
+        Set-Answers @('https://huggingface.co/example/tool-model', $gguf, 'imported', '4', '', 'y')
         Select-LocalModel
         Assert-True ($script:LocalModel -eq 'local-ai-imported') 'Import alias missing'
     }
     Test-Case 'Invalid GGUF rejected' {
         $gguf = Join-Path $script:Fixture 'bad.gguf'
         [IO.File]::WriteAllText($gguf, 'invalid')
-        Set-Answers @('2', $gguf)
+        Set-Answers @('https://huggingface.co/example/tool-model', $gguf)
         Assert-Throws { Select-LocalModel } 'not a GGUF'
+        Set-Answers @('https://example.invalid/model.gguf')
+        Assert-Throws { Select-LocalModel } 'Only huggingface.co URLs'
     }
     Test-Case 'Low disk rejected before pull' {
         $script:Mode = 'low-disk'
         $script:Calls.Clear()
-        Set-Answers @('1', 'model', '4', '')
+        Set-Answers @('model', '4', '')
         Assert-Throws { Select-LocalModel } 'Not enough'
         Assert-True (@($script:Calls | Where-Object { $_.Arguments[0] -eq 'pull' }).Count -eq 0) 'Downloaded despite low disk'
         $script:Mode = 'ok'
     }
     Test-Case 'Invalid size/context rejected before pull' {
-        foreach ($answers in @(@('1', 'model', 'bad'), @('1', 'model', '1', '0'), @('1', 'model', '1', '9999999999'))) {
+        foreach ($answers in @(@('model', 'bad'), @('model', '1', '0'), @('model', '1', '9999999999'))) {
             Set-Answers $answers
             Assert-Throws { Select-LocalModel } 'numeric|integer'
         }
@@ -259,35 +262,35 @@ try {
     Test-Case 'Required context and model limit enforced without misleading alias' {
         $script:Calls.Clear()
         foreach ($context in @('8192', '32768', '65535')) {
-            Set-Answers @('1', 'model', '1', $context)
+            Set-Answers @('model', '1', $context)
             Assert-Throws { Select-LocalModel } 'at least 65536'
         }
-        Set-Answers @('1', 'NONE')
+        Set-Answers @('NONE')
         Assert-Throws { Select-LocalModel } 'no suitable local model'
         Assert-True ($script:Calls.Count -eq 0) 'Invalid context triggered download'
         foreach ($mode in @('short-context', 'info-context')) {
             $script:Mode = $mode
-            Set-Answers @('1', 'model', '1', '', 'y')
+            Set-Answers @('model', '1', '', 'y')
             Assert-Throws { Select-LocalModel } '32768 context tokens'
         }
         Assert-True (@($script:Calls | Where-Object { $_.Arguments[0] -eq 'pull' }).Count -eq 0) 'Downloaded a known 32K model'
         Assert-True (@($script:Calls | Where-Object { $_.Arguments[0] -eq 'create' }).Count -eq 0) 'Created unsupported context alias'
         $script:Mode = 'unknown-context'
-        Set-Answers @('1', 'model', '1', '', 'y')
+        Set-Answers @('model', '1', '', 'y')
         Select-LocalModel
         Assert-True ($script:Context -eq 65536) 'Default context is not 65536'
         $script:Mode = 'ok'
     }
     Test-Case 'Out-of-catalog Gemini recommendation is rejected before pull' {
         $script:Calls.Clear()
-        Set-Answers @('1', 'qwen2.5-coder:14b', '9', '', 'y')
+        Set-Answers @('qwen2.5-coder:14b', '9', '', 'y')
         Assert-Throws { Select-LocalModel } 'not in the wizard-verified candidate list'
         Assert-True (@($script:Calls | Where-Object { $_.Arguments[0] -eq 'pull' }).Count -eq 0) 'Pulled an out-of-catalog recommendation'
     }
     Test-Case 'Installed exact model is reused without pull' {
         $script:InstalledModel = 'model:q4'
         $script:Calls.Clear()
-        Set-Answers @('1', 'model:q4', '4', '', 'y')
+        Set-Answers @('model:q4', '4', '', 'y')
         Select-LocalModel
         Assert-True (@($script:Calls | Where-Object { $_.Arguments[0] -eq 'pull' }).Count -eq 0) 'Installed model was pulled again'
         Assert-True (@($script:Calls | Where-Object { $_.Arguments[0] -eq 'create' }).Count -eq 1) 'Local context alias was not created'
@@ -296,14 +299,14 @@ try {
     Test-Case 'Remote and non-tool models rejected' {
         foreach ($mode in @('remote', 'no-tools')) {
             $script:Mode = $mode
-            Set-Answers @('1', 'model', '1', '', 'y')
+            Set-Answers @('model', '1', '', 'y')
             Assert-Throws { Select-LocalModel } 'cloud inference|tool calling'
         }
         $script:Mode = 'ok'
     }
     Test-Case 'Failed model download surfaces' {
         $script:Mode = 'pull-fails'
-        Set-Answers @('1', 'model', '1', '', 'y')
+        Set-Answers @('model', '1', '', 'y')
         Assert-Throws { Select-LocalModel } 'Download failed'
         $script:Mode = 'ok'
     }
@@ -354,13 +357,12 @@ try {
         Assert-True ($source.Contains('reused without pulling it again')) 'Missing installed-model reuse explanation'
         Assert-True ($source.Contains('[int]$response.StatusCode -ne 206')) 'Bounded registry range response is not enforced'
     }
-    Test-Case 'VS Code extension-list failure retains native diagnostics' {
+    Test-Case 'VS Code profile readiness failure retains native diagnostics' {
         function Invoke-NativeOutput([string]$File, [string[]]$Arguments) {
             Assert-True ($Arguments -contains '--list-extensions') 'Unexpected captured-output command'
             throw "Command failed (exit 9): fixture-code --list-extensions`nfixture extension list failure"
         }
-        Set-Answers @('y')
-        Assert-Throws { Connect-Code } 'exit 9[\s\S]*fixture extension list failure'
+        Assert-Throws { Wait-CodeProfile 1 } 'did not make the Local AI profile available[\s\S]*exit 9[\s\S]*fixture extension list failure'
     }
     Test-Case 'Installer signature mismatch rejected' {
         function Get-AuthenticodeSignature { return [pscustomobject]@{ Status = 'Valid'; SignerCertificate = [pscustomobject]@{ Subject = 'Untrusted publisher' } } }
@@ -381,6 +383,7 @@ $global:LASTEXITCODE = 0
 '@)
         function Get-Code { return $cli }
         function Get-Ollama { return 'fixture-ollama' }
+        function Wait-CodeProfile { return @() }
         function Get-Command {
             param($Name, $CommandType, $ErrorAction)
             if ($Name -eq 'git.exe') { return [pscustomobject]@{ Source = 'fixture-git' } }
@@ -392,7 +395,7 @@ $global:LASTEXITCODE = 0
         foreach ($run in @(1, 2)) {
             Install-Applications
             Wait-Ollama
-            Set-Answers @('n', '', '1', 'model:q4', '4', '65536', 'y', 'y', $script:Fixture)
+            Set-Answers @('n', '', 'model:q4', '4', '65536', 'y', 'y', $script:Fixture)
             Write-HardwarePrompt
             Select-LocalModel
             Test-LocalModel
@@ -404,6 +407,8 @@ $global:LASTEXITCODE = 0
         foreach ($call in $codeCalls) {
             Assert-True ($call.Arguments -contains '--profile' -and $call.Arguments -contains 'Local AI') 'Unscoped profile operation'
         }
+        Assert-True ($codeCalls[0].Arguments -contains '--new-window' -and $codeCalls[1].Arguments -contains '--install-extension') 'First run did not create the profile before extension installation'
+        Assert-True ($codeCalls[2].Arguments -contains '--new-window' -and $codeCalls[3].Arguments -contains '--install-extension') 'Rerun did not open the profile before extension installation'
     }
     Test-Case 'Fresh installs wait only for installers and surface cancellation' {
         $cli = Join-Path $script:Fixture 'fresh-code.ps1'
