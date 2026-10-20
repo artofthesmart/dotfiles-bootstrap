@@ -1,6 +1,16 @@
 # termux-setup
 A shell script for setting up Termux the way I like.
 
+## Local AI manager friend preview
+
+The new manager bootstrap is separate from the existing compatibility wizards:
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/artofthesmart/dotfiles-bootstrap/main/install.sh | sh
+```
+
+On Windows, review and run `install.ps1` from this repository. Both bootstraps install user-locally, verify the release SHA-256 before extraction, and run `local-ai setup`. See [manager self-deployment](docs/local-ai-manager/self-deployment.md) for update, rollback, uninstall, PATH ownership, optional attestation, and unsigned friend-preview caveats. Existing `scripts/setup-local-ai.*` entry points remain available and unchanged.
+
 ## Local AI in VS Code
 
 These independent setup wizards install/reuse VS Code and Ollama, prepare a

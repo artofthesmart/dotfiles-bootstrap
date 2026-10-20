@@ -208,6 +208,10 @@ func (m *MemoryFileSystem) Rename(oldName, newName string) error {
 	if oldPath == m.root || newPath == m.root {
 		return pathError("rename", oldName, fs.ErrPermission)
 	}
+	specificOperation := RenameOperation(oldPath, newPath)
+	if err := m.fail(specificOperation, BeforeMutation); err != nil {
+		return pathError("rename", oldName, err)
+	}
 	if err := m.fail("fs.rename", BeforeMutation); err != nil {
 		return pathError("rename", oldName, err)
 	}
@@ -250,10 +254,17 @@ func (m *MemoryFileSystem) Rename(oldName, newName string) error {
 	}
 	m.markDirty(path.Dir(oldPath))
 	m.markDirty(path.Dir(newPath))
+	if err := m.fail(specificOperation, AfterMutation); err != nil {
+		return pathError("rename", oldName, err)
+	}
 	if err := m.fail("fs.rename", AfterMutation); err != nil {
 		return pathError("rename", oldName, err)
 	}
 	return nil
+}
+
+func RenameOperation(oldName, newName string) string {
+	return "fs.rename:" + path.Clean(oldName) + "->" + path.Clean(newName)
 }
 
 func (m *MemoryFileSystem) Remove(name string) error {

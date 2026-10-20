@@ -21,6 +21,8 @@ Machine-readable contracts:
 
 The release-embedded reviewed data is in [`catalog/models.json`](../../catalog/models.json). `internal/catalog` performs strict schema-shaped and domain validation, deterministic eligibility/scoring, separate-pool memory accounting, and primary/smaller-fallback selection. Run `make catalog-drift` for a read-only exact-tag registry report; it never rewrites the catalog. Registry and runtime verification remain authoritative.
 
+User-local bootstrap, explicit update/rollback, PATH ownership, and friend-preview signing limitations are defined in [manager self-deployment](self-deployment.md).
+
 ## Versioning policy
 
 The contract version and each schema discriminator are independent of the application version.

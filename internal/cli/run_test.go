@@ -10,6 +10,7 @@ import (
 
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/app"
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/platform"
+	"github.com/artofthesmart/dotfiles-bootstrap/internal/update"
 )
 
 var testTime = time.Date(2026, time.October, 20, 19, 30, 0, 0, time.UTC)
@@ -145,5 +146,52 @@ func TestStableCommandsAreNoMutationPlaceholders(t *testing.T) {
 				t.Fatalf("exit = %d, want %d", exit, app.ExitInternalFailure)
 			}
 		})
+	}
+}
+
+type fakeUpdater struct {
+	checked    bool
+	applied    bool
+	rolledBack bool
+}
+
+func (updater *fakeUpdater) Check(context.Context) (update.Release, error) {
+	updater.checked = true
+	return update.Release{Version: "2.0.0"}, nil
+}
+
+func (updater *fakeUpdater) Apply(_ context.Context, release update.Release) error {
+	updater.applied = release.Version == "2.0.0"
+	return nil
+}
+
+func (updater *fakeUpdater) Rollback(context.Context) error {
+	updater.rolledBack = true
+	return nil
+}
+
+func TestExplicitUpdateAndRollbackUseConfiguredSelfUpdater(t *testing.T) {
+	for _, test := range []struct {
+		args     []string
+		rollback bool
+	}{
+		{args: []string{"update"}},
+		{args: []string{"update", "--rollback"}, rollback: true},
+	} {
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		updater := &fakeUpdater{}
+		deps := testDependencies(&stdout, &stderr)
+		deps.Updater = updater
+		if exit := Run(context.Background(), append(test.args, "--json"), deps); exit != 0 {
+			t.Fatalf("%v exit = %d", test.args, exit)
+		}
+		if test.rollback {
+			if !updater.rolledBack || updater.checked || updater.applied {
+				t.Fatalf("rollback calls = %#v", updater)
+			}
+		} else if !updater.checked || !updater.applied || updater.rolledBack {
+			t.Fatalf("update calls = %#v", updater)
+		}
 	}
 }

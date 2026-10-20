@@ -30,6 +30,10 @@ func (OSFileSystem) MkdirAll(name string, mode fs.FileMode) error {
 	return os.MkdirAll(name, mode)
 }
 
+func (OSFileSystem) Chmod(name string, mode fs.FileMode) error {
+	return os.Chmod(name, mode)
+}
+
 func (OSFileSystem) Rename(oldName, newName string) error {
 	return os.Rename(oldName, newName)
 }

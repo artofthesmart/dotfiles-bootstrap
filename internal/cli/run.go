@@ -3,13 +3,16 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/app"
+	"github.com/artofthesmart/dotfiles-bootstrap/internal/install"
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/platform"
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/ui"
+	"github.com/artofthesmart/dotfiles-bootstrap/internal/update"
 )
 
 type Dependencies struct {
@@ -21,6 +24,7 @@ type Dependencies struct {
 	Network platform.Network
 	Build   app.BuildInfo
 	Service app.Service
+	Updater update.Updater
 }
 
 func Run(ctx context.Context, args []string, deps Dependencies) int {
@@ -43,6 +47,19 @@ func Run(ctx context.Context, args []string, deps Dependencies) int {
 	if !ok {
 		fmt.Fprintln(deps.Stderr, "local-ai: invalid command; run 'local-ai help'")
 		return int(app.ExitConfigurationFailure)
+	}
+	if (operation.Command == app.CommandUpdate || operation.Command == app.CommandUpdateRollback) && deps.Updater != nil {
+		result := runUpdate(ctx, operation, deps)
+		if jsonMode {
+			encoder := json.NewEncoder(deps.Stdout)
+			encoder.SetEscapeHTML(false)
+			if err := encoder.Encode(result); err != nil {
+				return int(app.ExitInternalFailure)
+			}
+		} else {
+			ui.RenderResult(deps.Stderr, result)
+		}
+		return int(result.ExitCode)
 	}
 
 	service := deps.Service
@@ -70,6 +87,51 @@ func Run(ctx context.Context, args []string, deps Dependencies) int {
 	}
 
 	return int(result.ExitCode)
+}
+
+func runUpdate(ctx context.Context, operation app.Operation, deps Dependencies) app.Result {
+	var err error
+	if operation.Command == app.CommandUpdateRollback {
+		err = deps.Updater.Rollback(ctx)
+	} else {
+		var release update.Release
+		release, err = deps.Updater.Check(ctx)
+		if err == nil {
+			err = deps.Updater.Apply(ctx, release)
+		}
+	}
+	result := app.Result{
+		SchemaVersion: app.EventSchemaVersion,
+		RecordType:    "result",
+		Timestamp:     deps.Clock.Now().UTC(),
+		Command:       operation.Command,
+		Components:    []app.Component{},
+		Issues:        []app.Issue{},
+		ManualActions: []app.ManualAction{},
+	}
+	if err == nil {
+		result.Outcome = app.OutcomeSuccess
+		result.ExitCode = app.ExitSuccess
+		result.Summary = "The manager deployment operation completed successfully."
+		return result
+	}
+	code := app.IssueInternal
+	var deploymentError *install.DeploymentError
+	if errors.As(err, &deploymentError) {
+		code = deploymentError.Code
+	}
+	issue := app.Issue{
+		Code: code, Severity: app.SeverityError, Domain: "update",
+		Summary: "The manager deployment operation failed.",
+		Remediations: []app.Remediation{{
+			Kind: "retry", Summary: "Review the typed issue and retry the explicit command.", SafeForYes: false,
+		}},
+	}
+	result.Outcome = app.OutcomeFailed
+	result.ExitCode = app.ExitForIssue(code)
+	result.Summary = issue.Summary
+	result.Issues = []app.Issue{issue}
+	return result
 }
 
 func extractFlag(args []string, flag string) (bool, []string) {
@@ -188,6 +250,6 @@ Commands:
 Global options:
   --json                Emit a versioned JSON result for stable commands
 
-Lifecycle commands are placeholders in this scaffold and do not mutate the host.
+Commands without a configured domain service remain non-mutating placeholders.
 `)
 }

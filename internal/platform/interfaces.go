@@ -13,6 +13,7 @@ type FileSystem interface {
 	ReadFile(string) ([]byte, error)
 	WriteFile(string, []byte, fs.FileMode) error
 	MkdirAll(string, fs.FileMode) error
+	Chmod(string, fs.FileMode) error
 	Rename(string, string) error
 	Remove(string) error
 	Sync(string) error
