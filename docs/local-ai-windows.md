@@ -36,7 +36,7 @@ override managed controls.
    A recommendation is not a performance guarantee.
 3. **Download in Ollama Desktop.** Open Ollama from Start. Click the model
    selector and type Gemini's exact recommended name, including its size tag
-   (example format: `qwen2.5-coder:32b`, not a recommendation). Select the
+   (such as `:7b`; use Gemini's exact tag). Select the
    matching **local**, not cloud, model. Click its download icon if shown.
    Type **Say hello** in the message box and press Enter; Ollama downloads
    the model if needed. Wait for a reply, then return to the wizard and enter
@@ -57,10 +57,10 @@ then select a cloud Chat model for metered Copilot. Normal cloud account,
 organization and billing rules apply. Return via **Profiles > Local AI** and
 select Ollama, not **Auto**.
 
-If slow or out of memory, try a smaller model/context. Profiles are not billing
+Require **65536+ context tokens**; choose a smaller compatible model if memory runs short.
+Profiles are not billing
 boundaries; gray-text autocomplete is separate. Telemetry/internet settings are
 unchanged.
-Small context budgets save memory but constrain agents; heed warnings.
 
 **Sources:** [Windows requirements](https://docs.ollama.com/windows),
 [VS Code models](https://code.visualstudio.com/docs/agent-customization/language-models),

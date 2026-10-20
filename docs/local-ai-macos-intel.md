@@ -54,9 +54,9 @@ then select a cloud model in Chat for metered Copilot. Return through
 **Profiles > Local AI**, then explicitly select Ollama. Avoid **Auto** when you
 want local inference. Your cloud account, plan and organization policies apply.
 
-If a check times out or memory runs short, try the smaller fallback or a shorter
-context. Profiles do not enforce billing isolation; autocomplete is separate.
-Small context budgets save memory but constrain agents; heed warnings.
+Require **65536+ context tokens**. If memory runs short, choose a smaller
+compatible model, not a shorter context. Profiles do not enforce billing
+isolation; autocomplete is separate.
 This setup does not disable telemetry or internet access.
 
 **Sources:** [Intel CPU-only support](https://docs.ollama.com/macos),

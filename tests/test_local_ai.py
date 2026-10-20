@@ -32,7 +32,14 @@ class OllamaFixture(http.server.BaseHTTPRequestHandler):
             self.send_error(500, "fixture failure")
             return
         if self.path == "/api/show":
-            result = {"capabilities": ["completion", "tools"]}
+            result = {"capabilities": ["completion", "tools"], "details": {"context_length": 131072}}
+            if self.server.mode == "short-context":
+                result["details"]["context_length"] = 32768
+            if self.server.mode == "info-context":
+                result.pop("details")
+                result["model_info"] = {"general.architecture": "qwen2", "qwen2.context_length": 32768}
+            if self.server.mode == "unknown-context":
+                result.pop("details")
             if self.server.mode == "no-tools":
                 result["capabilities"] = ["completion"]
             if self.server.mode == "remote":
@@ -175,17 +182,19 @@ class WizardTests(unittest.TestCase):
         self.assertEqual(self.calls("ollama"), [])
 
     def test_model_acquisition_and_actual_tool_call(self):
-        result = self.run_shell("choose_model; check_model", "1\nmodel:q4\n4\n8192\ny\n")
+        result = self.run_shell("choose_model; check_model", "1\nmodel:q4\n4\n65536\ny\n")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn(["ollama", "pull", "model:q4"], self.calls("ollama"))
         chat = next(body for path, body in self.server.requests if path == "/api/chat")
         self.assertEqual(chat["model"], "local-ai-model-q4")
-        self.assertEqual(chat["options"]["num_ctx"], 8192)
+        self.assertEqual(chat["options"]["num_ctx"], 65536)
         self.assertIn("tool-call check passed", result.stdout)
         self.assertIn("https://ollama.com/library", result.stdout)
         self.assertIn("enter the exact model name and size tag", result.stdout)
         self.assertIn("wizard checks/reuses those files", result.stdout)
-        self.assertIn("PARAMETER num_ctx 8192", (self.base / "work/Modelfile").read_text())
+        self.assertIn("PARAMETER num_ctx 65536", (self.base / "work/Modelfile").read_text())
+        positions = [result.stdout.index(label + ":") for label in ("MODEL", "DOWNLOAD_GIB", "CONTEXT_TOKENS")]
+        self.assertEqual(positions, sorted(positions))
 
     def test_gguf_import_with_spaces(self):
         gguf = self.base / "weights with spaces.gguf"
@@ -221,10 +230,33 @@ class WizardTests(unittest.TestCase):
             result = self.run_shell("choose_model", answers)
             self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.calls("ollama"), [])
-        result = self.run_shell("choose_model; check_model", "1\nmodel\n1\n008192\ny\n")
+        result = self.run_shell("choose_model; check_model", "1\nmodel\n1\n0065536\ny\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         chat = next(body for path, body in self.server.requests if path == "/api/chat")
-        self.assertEqual(chat["options"]["num_ctx"], 8192)
+        self.assertEqual(chat["options"]["num_ctx"], 65536)
+
+    def test_context_minimum_and_model_supported_limit(self):
+        for context in ("8192", "32768", "65535"):
+            result = self.run_shell("choose_model", f"1\nmodel\n1\n{context}\n")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("65536", result.stderr)
+        self.assertEqual(self.calls("ollama"), [])
+        for mode in ("short-context", "info-context"):
+            self.server.mode = mode
+            result = self.run_shell("choose_model", "1\nmodel\n1\n\ny\n")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("32768", result.stderr)
+            self.assertFalse(any(row[1] == "create" for row in self.calls("ollama")))
+        self.server.mode = "unknown-context"
+        result = self.run_shell("choose_model", "1\nmodel\n1\n\ny\n")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Supported context limit unknown", result.stdout)
+
+    def test_no_suitable_recommendation_stops_before_download(self):
+        result = self.run_shell("choose_model", "1\nNONE\n")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no suitable model", result.stderr)
+        self.assertEqual(self.calls("ollama"), [])
 
     def test_remote_and_non_tool_models_rejected(self):
         for mode, message in [("remote", "cloud inference"), ("no-tools", "advertise tools")]:
@@ -263,9 +295,11 @@ class WizardTests(unittest.TestCase):
             self.assertNotIn(forbidden, prompt)
         self.assertIn("GPU memory: unknown", prompt)
         self.assertIn("TOOL CALLING", prompt)
-        self.assertRegex(prompt, r"(?m)^MODEL: .+\nCONTEXT_TOKENS: .+\nDOWNLOAD_GIB: ")
+        self.assertRegex(prompt, r"(?m)^MODEL: .+\nDOWNLOAD_GIB: .+\nCONTEXT_TOKENS: ")
         self.assertIn("before\nany greeting", prompt)
         self.assertIn("structured Ollama API tool_calls", prompt)
+        self.assertIn("MANDATORY FOR THIS SETUP", prompt)
+        self.assertIn("Do not lower context to make it fit", prompt)
         self.assertIn("nvidia-smi failed", result.stdout)
 
     def test_documents_location_respects_redirect_and_disabled_xdg(self):
@@ -380,7 +414,7 @@ class WizardTests(unittest.TestCase):
         self.assertIn(str(self.repo), self.calls("code")[-1])
 
     def test_full_interactive_flow_with_fake_api(self):
-        answers = f"\n\nn\n\n1\nmodel:q4\n4\n8192\ny\ny\n{self.repo}\n"
+        answers = f"\n\nn\n\n1\nmodel:q4\n4\n65536\ny\ny\n{self.repo}\n"
         master, slave = pty.openpty()
         # Platform detection has its own tests; no host-specific install paths.
         command = self.source + 'detect_platform() { OS=Linux; ARCH=amd64; OS_VERSION=fixture; }; main'

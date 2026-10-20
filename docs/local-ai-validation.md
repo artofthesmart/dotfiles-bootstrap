@@ -77,9 +77,10 @@ For each platform, exercise these steps:
 2. Confirm model-storage volume selection, disk estimates and the allowlisted
    hardware report. Review missing memory fields before sharing with Gemini.
    Confirm the wizard makes no Gemini call.
-    Check that its prompt requires Gemini to put `MODEL`, `CONTEXT_TOKENS` and
-    `DOWNLOAD_GIB` first, ahead of analysis, and to distinguish actual structured
-    tool-call evidence from coding benchmarks or JSON returned as ordinary text.
+   Check that Gemini is instructed to put `MODEL`, `DOWNLOAD_GIB`, then
+   `CONTEXT_TOKENS` first, matching the wizard's questions. Context must be at
+   least 65536 and fit hardware with model weights plus KV cache and OS headroom.
+   Distinguish structured tool-call evidence from coding benchmarks or JSON prose.
 3. Pull a real local tool-capable model. Try a compatible single-file GGUF
    import with a space-containing path and an incompatible model. Confirm
    advertised tools **and** actual expected tool-call output are checked.
@@ -111,14 +112,18 @@ For each platform, exercise these steps:
   the fallback or a different tool-capable template. GGUF magic validation
   only identifies the format; Ollama still validates actual compatibility.
 - **Context:** the wizard creates a `local-ai-...` model with `num_ctx`.
-  It defaults to 8192 and accepts 2048-1048576 tokens, not as a hardware
-  guarantee. Larger context increases memory use. The selected model/backend
-  must support it. Existing aliases can be replaced after confirmation;
+  It defaults to 65536 and accepts 65536-1048576 tokens, not as a hardware
+  guarantee. The official extension recommends at least 65536 tokens; this
+  workflow treats that as its minimum requirement. Smaller input is rejected,
+  not silently accepted with a warning. Larger context increases memory use.
+  Models advertising a smaller supported limit are rejected before alias creation;
+  unknown limits produce an explicit verification warning. Setting `num_ctx`
+  beyond a model's supported window does not prove extended-context support.
+  Existing aliases can be replaced after confirmation;
   source weights are reused rather than downloaded again for the alias.
-  The official extension recommends at least 65536 tokens for agents and warns
-  below that. The conservative wizard default prioritizes memory headroom, not
-  full agent capability; Gemini is asked to identify hardware that cannot
-  meet the recommendation. Smaller-context setups are constrained.
+  If nothing fits at 65536+, Gemini must return `MODEL: NONE` and explain why,
+  rather than recommending a 32K model or lowering the context. Entering NONE
+  stops the wizard with that explanation instead of trying to download it.
 - **Slow/no response:** the smoke test allows 180 seconds. Windows allows 1024
   output tokens initially; Bash currently allows 256. A slow/reasoning model
   may exhaust this budget without returning a tool call. Windows reports the
@@ -127,7 +132,8 @@ For each platform, exercise these steps:
   check; test a real approved edit and switch models if tools fail. HTTP and
   inference errors still stop setup rather than being treated as unverified
   successful inference. Inspect Ollama
-  logs, choose a smaller/faster model or reduce context, then rerun.
+  logs and choose a smaller/faster model that still supports and fits 65536+
+  context, then rerun. Do not reduce context below the minimum.
   `ollama ps` displays actual CPU/GPU offload after the check; an installed
   driver alone is not evidence of GPU inference. Intel Mac Ollama is CPU-only.
 - **Missing model in VS Code:** verify Ollama is responding at

@@ -55,10 +55,9 @@ and select a cloud Chat model for metered Copilot. Normal account, organization
 and billing rules apply. Return through **Profiles > Local AI**, explicitly
 selecting Ollama rather than **Auto**.
 
-For memory errors or slow CPU inference, try a smaller model/context. Profiles
+Require **65536+ context tokens**; choose a smaller compatible model if needed. Profiles
 are not billing boundaries; autocomplete is separate. Telemetry and internet
 access are unchanged.
-Small context budgets save memory but constrain agents; heed warnings.
 
 **Sources:** [Linux installation](https://docs.ollama.com/linux),
 [VS Code Linux](https://code.visualstudio.com/docs/setup/linux),

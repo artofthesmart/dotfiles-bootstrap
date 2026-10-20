@@ -51,8 +51,8 @@ organization and billing rules apply. To return, choose **Local AI** and select
 the Ollama model again. **Auto is not a local-only choice.**
 
 Try one small documentation edit and an existing test before larger work.
-If slow or out of memory, rerun with Gemini's smaller fallback or less context.
-Small context budgets save memory but constrain agents; heed warnings.
+Require **65536+ context tokens**. If memory runs short, choose a smaller model
+that still supports this context; do not lower it.
 Profiles are not billing/security boundaries; gray-text autocomplete is separate.
 This setup does not disable telemetry or internet access.
 

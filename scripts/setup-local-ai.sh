@@ -212,10 +212,11 @@ hardware_prompt() {
 REQUIRED RESPONSE FORMAT: Start your response with this copy-back block, before
 any greeting, explanation, heading, or analysis. Replace placeholders with values:
 MODEL: <exact local Ollama name:tag; no command, URL, backticks, or cloud model>
-CONTEXT_TOKENS: <integer tokens; e.g. 32768, not 32k>
 DOWNLOAD_GIB: <numeric additional storage estimate in GiB; no units>
+CONTEXT_TOKENS: <integer tokens, at least 65536; no commas or 64k shorthand>
 These are the values the user must copy into the setup wizard. Put MODEL first
-and CONTEXT_TOKENS second. Put ALL analysis, links, caveats and fallback choices
+then DOWNLOAD_GIB, then CONTEXT_TOKENS, matching its question order exactly.
+Put ALL analysis, links, caveats and fallback choices
 AFTER this block. Do not invent a runnable recommendation if none is suitable:
 use MODEL: NONE and explain the blocker afterward.
 
@@ -230,9 +231,15 @@ Require evidence of structured Ollama API tool_calls for the exact recommended
 variant/template, not just coding benchmarks, a tools label, or JSON in chat text.
 If exact-variant tool behavior is unverified, state that prominently after the
 copy-back block; do not promise VS Code Agent compatibility.
-The official VS Code Ollama extension recommends at least 65536 context tokens.
-If that will not fit, say explicitly that smaller-context agents are constrained;
-do not sacrifice OS/memory headroom or claim the machine meets that recommendation.
+MANDATORY FOR THIS SETUP: We need at least 65536 tokens of context for the
+VS Code Ollama extension. Recommend only models whose supported context window
+is at least 65536 AND whose weights plus KV cache at that context fit this
+hardware with OS/VS Code memory headroom. A small download alone is not enough.
+Do not recommend a 32768-context model and simply set num_ctx to 65536; setting
+a larger number does not establish model support. Verify any extended-context
+requirements against the exact model variant. Do not lower context to make it fit.
+If no suitable model fits, use MODEL: NONE, DOWNLOAD_GIB: N/A,
+CONTEXT_TOKENS: N/A in the first block and explain the hardware/support blocker.
 Prefer https://ollama.com/library models. If none fit, give an exact supported
 GGUF file and source page on https://huggingface.co, including architecture and
 chat-template/tool support caveats. Do not suggest executing repository code.
@@ -262,7 +269,7 @@ choose_model() {
         printf 'Download it in Ollama Desktop:\n'
         printf '  1. Open Ollama from Applications.\n'
         printf '  2. Click the model selector and type the exact name Gemini recommended, including any size tag like :32b.\n'
-        printf '     Example format: qwen2.5-coder:32b. Use YOUR recommended tool-capable model, not this example automatically.\n'
+        printf '     Keep the exact tag Gemini gave you; a size tag alone does not establish tool or 65536-context support.\n'
         printf '  3. Select the matching LOCAL model and click its download icon if shown. Do not choose a cloud model.\n'
         printf '  4. Type "Say hello" in the message box and press Enter. If needed, Ollama downloads the model before replying.\n'
         printf '  5. Wait for the download and reply. Return here and enter that same model name.\n'
@@ -274,8 +281,9 @@ choose_model() {
     source=$ANSWER
     case "$source" in
         1)
-            ask 'Paste the exact model name, including its size tag if shown (name only, without "ollama run")'
+            ask 'MODEL: paste the exact model name and tag from Gemini (without "ollama run")'
             MODEL=$ANSWER
+            [ "$MODEL" != NONE ] || fail "Gemini found no suitable model at 65536+ context. Review its explanation; do not download an unsuitable model."
             valid_model "$MODEL" || fail "Use a simple Library model[:tag], not a command, URL, namespace, or cloud model."
             ;;
         2)
@@ -292,7 +300,7 @@ choose_model() {
             ;;
         *) fail "Choose 1 or 2." ;;
     esac
-    ask "Expected additional model storage in GiB, from the model page (include an extra copy for GGUF import; Enter if unknown)"
+    ask "DOWNLOAD_GIB: paste the storage estimate from Gemini (number only; Enter if unknown; include an extra copy for GGUF import)"
     size=$ANSWER
     if [ -n "$size" ]; then
         [[ "$size" =~ ^[0-9]+([.][0-9]+)?$ ]] || fail "Model size must be numeric GiB."
@@ -303,14 +311,11 @@ choose_model() {
     fi
     available=$(free_kib)
     [ "$available" -ge "$needed" ] || fail "Not enough model-volume space (allowing 2 GiB spare). Free space or choose a smaller model."
-    ask "Agent context tokens recommended by Gemini (Enter for a conservative 8192)"
-    context=${ANSWER:-8192}
-    [[ "$context" =~ ^[0-9]+$ ]] && [ "${#context}" -le 7 ] && [ "$context" -ge 2048 ] && [ "$context" -le 1048576 ] ||
-        fail "Choose an integer context size from 2048 to 1048576."
+    ask "CONTEXT_TOKENS: paste the context from Gemini (minimum 65536; Enter for 65536)"
+    context=${ANSWER:-65536}
+    [[ "$context" =~ ^[0-9]+$ ]] && [ "${#context}" -le 7 ] && [ "$context" -ge 65536 ] && [ "$context" -le 1048576 ] ||
+        fail "Choose an integer context size from 65536 to 1048576. Ask Gemini for a compatible model rather than reducing context."
     CONTEXT=$((10#$context))
-    if [ "$CONTEXT" -lt 65536 ]; then
-        printf 'WARNING: The Ollama VS Code extension recommends 65536+ context tokens for agents.\nThis smaller budget saves memory but limits agent tasks and may trigger a VS Code warning.\n'
-    fi
     confirm "Acquire $MODEL with context $CONTEXT? Downloads may be large. Existing models with this name may be updated/replaced" || fail "Model acquisition cancelled."
     if [ "$source" = 1 ]; then
         "$OLLAMA" pull "$MODEL" || fail "Download failed. Check the tag, disk space, and network, then rerun."
@@ -323,6 +328,14 @@ choose_model() {
     api show -H 'Content-Type: application/json' --data-binary "@$WORK/show-request.json" > "$WORK/show.json"
     "$JQ" -e '(.remote_host // "") == "" and (.remote_model // "") == ""' "$WORK/show.json" >/dev/null ||
         fail "This model routes to cloud inference; choose a local weights model."
+    local limit
+    limit=$("$JQ" '[.details.context_length,
+        (.model_info as $info | $info[($info["general.architecture"] // "") + ".context_length"])]
+        | map(select(type == "number" and . > 0)) | min // 0' "$WORK/show.json")
+    if [ "$limit" -gt 0 ] && [ "$CONTEXT" -gt "$limit" ]; then
+        fail "This model advertises $limit context tokens, below the requested $CONTEXT. Ask Gemini for 65536+ support; downloaded files are preserved."
+    fi
+    [ "$limit" -gt 0 ] || printf 'WARNING: Supported context limit unknown. Verify 65536+ support on the exact model page.\n'
     "$JQ" -e '(.capabilities // []) | index("tools") != null' "$WORK/show.json" >/dev/null ||
         fail "Model does not advertise tools. Choose a tool-capable model; do not force-enable unsupported tools."
     LOCAL_MODEL="local-ai-${MODEL//:/-}"
@@ -339,7 +352,7 @@ check_model() {
     }' > "$WORK/chat-request.json"
     printf '\nChecking local inference and a harmless tool request (180-second limit; no tool will execute)...\n'
     api chat -H 'Content-Type: application/json' --data-binary "@$WORK/chat-request.json" > "$WORK/chat.json" ||
-        fail "Inference failed/timed out. Check Ollama logs; try a smaller model/context or retry after loading."
+        fail "Inference failed/timed out. Check Ollama logs; try a smaller model that supports 65536+ context or retry after loading."
     "$JQ" -e '.done == true and any(.message.tool_calls[]?;
         .function.name == "local_ai_check" and .function.arguments.value == "ready")' "$WORK/chat.json" >/dev/null ||
         fail "Model did not produce the expected tool call. Try a reliable tool-capable model or compatible GGUF template."
