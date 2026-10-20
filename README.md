@@ -5,7 +5,8 @@ A shell script for setting up Termux the way I like.
 
 These independent setup wizards install/reuse VS Code and Ollama, prepare a
 hardware-only prompt for you to paste into Gemini, check a local tool-capable
-model, and open your checkout in a separate **Local AI** profile.
+model, and configure a separate **Local AI** profile where you can open or clone
+any repository.
 The guides explain switching back to cloud Copilot. Local inference has no
 per-request cloud-model fee; cloud features and billing remain separate.
 

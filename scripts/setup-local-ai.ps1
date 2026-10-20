@@ -191,9 +191,18 @@ function Invoke-OllamaApi([string]$Endpoint, $Body = $null) {
 function Wait-Ollama {
     try { $response = Invoke-OllamaApi 'version' }
     catch {
-        Write-Host 'Ollama is not responding at 127.0.0.1:11434. Open Ollama from the Start menu.'
-        [void](Read-Choice 'When it is running, press Enter to retry')
-        $response = Invoke-OllamaApi 'version'
+        Write-Host 'Ollama is not responding at 127.0.0.1:11434. Starting it automatically...'
+        try {
+            [void](Start-Process -FilePath $script:Ollama -ArgumentList @('serve') -WindowStyle Hidden)
+        } catch {
+            throw "Ollama is installed but could not be started automatically: $($_.Exception.Message)"
+        }
+        $response = $null
+        for ($attempt = 1; $attempt -le 30 -and $null -eq $response; $attempt++) {
+            Start-Sleep -Seconds 1
+            try { $response = Invoke-OllamaApi 'version' } catch {}
+        }
+        if ($null -eq $response) { throw 'Ollama did not respond after an automatic start attempt. Open Ollama and rerun setup.' }
     }
     if (-not $response.version) { throw 'Invalid Ollama server response.' }
 }
@@ -270,10 +279,9 @@ These are the ONLY allowed Ollama Library recommendations for this run. The
 wizard read each exact tag's registry layers and GGUF context metadata directly.
 Choose MODEL exactly as written from this list, or use MODEL: NONE. Do not output
 another tag, alias, quantization, family member or Hugging Face model in the
-copy-back block. Repeat that candidate's DOWNLOAD_GIB value. Output
-CONTEXT_TOKENS: 65536 exactly; the verified context is the supported ceiling,
-not the requested allocation. Tool use is still unverified until the wizard's
-post-download local metadata and structured tool-call checks pass.
+copy-back line. Candidate size and verified context are metadata for your
+analysis; the wizard already has them. Tool use is still unverified until the
+wizard's post-download local metadata and structured tool-call checks pass.
 
 TOOL CALLING STATUS:
 The shortlist is limited to models currently presented as tool-capable by
@@ -299,15 +307,13 @@ without confirming the backend, driver and actual Ollama runtime allocation.
 This 50% planning rule is for Windows iGPUs, not a dedicated-GPU VRAM estimate.
 Keep separately detected dedicated GPU memory separate; do not combine pools.
 
-REQUIRED RESPONSE FORMAT: Start your response with this copy-back block, before
-any greeting, explanation, heading, or analysis. Replace placeholders with values:
+REQUIRED RESPONSE FORMAT: Start your response with this copy-back line, before
+any greeting, explanation, heading, or analysis:
 MODEL: <exact local Ollama name:tag; no command, URL, backticks, or cloud model>
-DOWNLOAD_GIB: <numeric additional storage estimate in GiB; no units>
-CONTEXT_TOKENS: <integer tokens, at least 65536; no commas or 64k shorthand>
-These are the values the user must copy into the setup wizard. Put MODEL first
-then DOWNLOAD_GIB, then CONTEXT_TOKENS, matching its question order exactly.
-Put ALL analysis, links, caveats and fallback choices
-AFTER this block. Do not invent a runnable recommendation if none is suitable:
+This is the only value the user must copy into the setup wizard. The wizard
+already knows the exact registry size and fixes agent context at 65536 tokens.
+Put ALL analysis, links, caveats and fallback choices AFTER this line.
+Do not invent a runnable recommendation if none is suitable:
 use MODEL: NONE and explain the blocker afterward.
 
 Compare ONLY the verified candidates above and explain which best fits this
@@ -324,8 +330,7 @@ hardware with OS/VS Code memory headroom. A small download alone is not enough.
 Do not recommend a 32768-context model and simply set num_ctx to 65536; setting
 a larger number does not establish model support. Verify any extended-context
 requirements against the exact model variant. Do not lower context to make it fit.
-If no suitable model fits, use MODEL: NONE, DOWNLOAD_GIB: N/A,
-CONTEXT_TOKENS: N/A in the first block and explain the hardware/support blocker.
+If no suitable model fits, use MODEL: NONE and explain the hardware/support blocker.
 Prefer https://ollama.com/library models. If none fit, give an exact supported
 GGUF file and source page on https://huggingface.co, including architecture and
 chat-template/tool support caveats. Do not suggest executing repository code.
@@ -335,8 +340,16 @@ State uncertainties and ask about missing hardware details instead of guessing.
     [IO.File]::WriteAllText($path, $promptText)
     Write-Host "`nReview this hardware-only prompt before sharing it with Gemini:`n$promptText"
     Write-Host "`nSaved to $path"
-    if (Confirm-Step 'Copy the reviewed prompt to the clipboard') { Set-Clipboard -Value $promptText }
-    [void](Read-Choice 'Paste it into Gemini yourself; return with a model tag, size and context recommendation, then press Enter')
+    if (Get-Command Set-Clipboard -ErrorAction SilentlyContinue) {
+        try {
+            Set-Clipboard -Value $promptText
+            Write-Host 'Copied the prompt to the clipboard.'
+        } catch {
+            Write-Warning 'Could not copy the prompt automatically; use the displayed or saved copy.'
+        }
+    } else {
+        Write-Host 'Clipboard command unavailable; use the displayed or saved copy.'
+    }
 }
 function Test-ModelName([string]$Name) {
     return $Name -cmatch '^[a-zA-Z0-9][a-zA-Z0-9._-]*(:[a-zA-Z0-9][a-zA-Z0-9._-]*)?$' -and $Name -notmatch 'cloud'
@@ -544,6 +557,7 @@ function Select-LocalModel {
     $gguf = $null
     $installed = $false
     $remoteInfo = $null
+    $script:Context = 65536
     if ($selection -match '^https://huggingface\.co/') {
         $source = '2'
         Write-Host 'Detected a Hugging Face source. Download a compatible single-file GGUF from that page yourself.'
@@ -568,22 +582,14 @@ function Select-LocalModel {
             $count = $stream.Read($bytes, 0, 4)
             if ($count -ne 4 -or [Text.Encoding]::ASCII.GetString($bytes) -cne 'GGUF') { throw 'The file is not a GGUF.' }
         } finally { $stream.Dispose() }
-        $script:Model = Read-Choice 'Local name for this import (use a new name to preserve previous models)'
+        $baseName = [IO.Path]::GetFileNameWithoutExtension($gguf).ToLowerInvariant()
+        $safeName = [regex]::Replace($baseName, '[^a-z0-9._-]+', '-').Trim('-')
+        if (-not $safeName) { $safeName = 'model' }
+        $script:Model = "imported-$safeName"
+        Write-Host "Import name: $script:Model"
     }
     if ($script:Model -eq 'NONE') { throw 'Gemini found no suitable local model for this hardware at 65536+ context. Review its explanation; do not download an unsuitable model.' }
     if (-not (Test-ModelName $script:Model)) { throw 'Use a simple model[:tag], not a command, URL, namespace or cloud model.' }
-    $sizeText = Read-Choice 'DOWNLOAD_GIB: paste Gemini''s estimate (number only; Enter if unknown; verified registry/file size overrides it)'
-    $size = 0.0
-    if ($sizeText) {
-        if ($sizeText -notmatch '^[0-9]+(\.[0-9]+)?$') { throw 'Size must be numeric GiB.' }
-        $size = [double]::Parse($sizeText, [Globalization.CultureInfo]::InvariantCulture)
-    }
-    $contextText = Read-Choice 'CONTEXT_TOKENS: paste the context from Gemini (minimum 65536; Enter for 65536)'
-    if (-not $contextText) { $contextText = '65536' }
-    if ($contextText -notmatch '^[0-9]{1,7}$' -or [int]$contextText -lt 65536 -or [int]$contextText -gt 1048576) {
-        throw 'Choose an integer context size from 65536 to 1048576. This VS Code setup requires at least 65536; ask Gemini for a compatible model rather than reducing context.'
-    }
-    $script:Context = [int]$contextText
     $script:LocalModel = 'local-ai-' + $script:Model.Replace(':', '-')
     $modelfile = Join-Path $script:Work 'Modelfile'
     if ($source -eq '1') {
@@ -602,7 +608,6 @@ function Select-LocalModel {
             if ($remoteInfo.ContextLength -lt $script:Context) {
                 throw "Exact tag $($remoteInfo.Model) advertises $($remoteInfo.ContextLength) context tokens, below the requested $script:Context. No model was downloaded."
             }
-            $size = $remoteInfo.DownloadBytes / 1GB
             if ((Get-ModelVolume).AvailableFreeSpace -lt ($remoteInfo.DownloadBytes + 2GB)) {
                 throw "Not enough model-volume space for the verified $(Format-DownloadSize $remoteInfo.DownloadBytes) download plus 2 GiB spare. No model was downloaded."
             }
@@ -614,9 +619,6 @@ function Select-LocalModel {
             Write-Host "  Free model-volume space: $(Format-DownloadSize (Get-ModelVolume).AvailableFreeSpace)"
             Write-Host "  VS Code alias: $script:LocalModel (created/recreated after confirmation)"
             Write-Host '  Tools: not trusted yet; checked from local metadata and a live tool call after download'
-            if ($sizeText -and [math]::Abs(([double]::Parse($sizeText, [Globalization.CultureInfo]::InvariantCulture)) - $size) -gt 0.5) {
-                Write-Warning "Gemini estimated $sizeText GiB; the exact registry layers total $([math]::Round($size, 1)) GiB. The registry value is used."
-            }
         }
     } else {
         $prefixLength = [int][math]::Min(1MB, (Get-Item -LiteralPath $gguf).Length)
@@ -740,13 +742,8 @@ function Connect-Code {
         Write-Warning 'Local tool use is UNVERIFIED. Test an approved edit in VS Code; choose another model if Agent tools fail.'
     }
     Write-Host 'GitHub Copilot Chat is bundled with this supported VS Code version; no marketplace install is needed.'
-    if (-not (Confirm-Step 'Open your repository in Local AI and install the official Ollama.ollama extension only for that profile')) { throw 'Profile setup cancelled.' }
-    $repo = Read-Choice 'Full path to an existing locally checked-out repository'
-    if (-not [IO.Path]::IsPathRooted($repo) -or -not (Test-Path -LiteralPath $repo -PathType Container)) { throw 'Choose an existing absolute directory.' }
-    $git = Get-Command git.exe -CommandType Application -ErrorAction SilentlyContinue
-    if (-not $git) { throw 'Git is required to verify the checkout. Install Git and rerun.' }
-    Invoke-Native $git.Source @('-C', $repo, 'rev-parse', '--show-toplevel')
-    Invoke-Native $script:Code @('--new-window', '--profile', 'Local AI', $repo)
+    Write-Host 'Creating/reusing Local AI and installing Ollama.ollama for that profile.'
+    Invoke-Native $script:Code @('--new-window', '--profile', 'Local AI')
     $extensions = @(Wait-CodeProfile)
     if ($extensions -contains 'Ollama.ollama') {
         Write-Host 'The Ollama extension is already installed in Local AI; no reinstall needed.' -ForegroundColor Green
@@ -760,7 +757,8 @@ function Connect-Code {
     Write-Host @"
 
 Finish in the Local AI window (these UI steps are not automated):
-1. Trust the workspace only if you trust this repository.
+1. Open or clone a repository: use File > Open Folder, File > Open Recent, or
+   Source Control > Clone Repository. Trust only repositories you trust.
 2. Open the built-in Copilot Chat, select Agent mode, then $script:LocalModel under Ollama.
    Do NOT select Auto or a cloud model. If missing, use the Command Palette:
    Ollama: Refresh Models, or Ollama: Diagnose Models.
@@ -811,14 +809,7 @@ function Start-LocalAISetup {
         Write-Host 'First, review your hardware and ask Gemini which small, tool-capable model fits.'
         Write-Host 'Then choose it from the Ollama catalog. This wizard will download it for you.'
         $script:ModelStorage = if ($env:OLLAMA_MODELS) { $env:OLLAMA_MODELS } else { Join-Path $HOME '.ollama\models' }
-        Write-Host "Model storage default: $script:ModelStorage"
-        $storage = Read-Choice 'If your running Ollama server uses different model storage, enter its absolute directory (Enter to keep default)'
-        if ($storage) {
-            if (-not [IO.Path]::IsPathRooted($storage) -or -not (Test-Path -LiteralPath $storage -PathType Container)) {
-                throw 'Choose an existing absolute model-storage directory.'
-            }
-            $script:ModelStorage = $storage
-        }
+        Write-Host "Detected model storage: $script:ModelStorage"
         Write-HardwarePrompt
         Select-LocalModel
         Write-SetupStep 3 'Check that the local model can use tools'
