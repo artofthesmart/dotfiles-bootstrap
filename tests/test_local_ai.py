@@ -545,6 +545,8 @@ class WizardTests(unittest.TestCase):
             os.close(master)
         self.assertEqual(process.returncode, 0, output.decode(errors="replace"))
         self.assertIn(b"VS Code Agent behavior still needs your confirmation", output)
+        self.assertIn(b"separate model picker at the bottom of the Chat input", output)
+        self.assertIn(b"Restricted Mode can hide local models", output)
         for row in self.calls("code"):
             if "--install-extension" in row:
                 self.assertIn("Local AI", row)

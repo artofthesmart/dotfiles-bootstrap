@@ -758,20 +758,24 @@ function Connect-Code {
 
 Finish in the Local AI window (these UI steps are not automated):
 1. Open or clone a repository: use File > Open Folder, File > Open Recent, or
-   Source Control > Clone Repository. Trust only repositories you trust.
-2. Open the built-in Copilot Chat, select Agent mode, then $script:LocalModel under Ollama.
-   Do NOT select Auto or a cloud model. If missing, use the Command Palette:
-   Ollama: Refresh Models, or Ollama: Diagnose Models.
-   If those commands do not appear yet, run Developer: Reload Window once.
-3. In this profile's Settings, enable chat.agentHost.byokModels.enabled if
+   Source Control > Clone Repository. Trust it only if you trust its contents.
+   Restricted Mode can hide local models and leave only Auto available.
+2. Run Developer: Reload Window once so the newly installed extension is active.
+3. Open the built-in Copilot Chat. In the Chat input, choose Agent from the mode
+   control. Then use the separate model picker at the bottom of the Chat input
+   and choose $script:LocalModel under Ollama. Ollama is not an Agent mode.
+4. If the model is absent, run Ollama: Refresh Models from the Command Palette.
+   If still absent, run Ollama: Diagnose Models and inspect the Ollama output.
+   Do NOT select Auto or a cloud model.
+5. In this profile's Settings, enable chat.agentHost.byokModels.enabled if
    required for the Copilot harness. Set chat.utilityModel and
    chat.utilitySmallModel to your local model using their model pickers.
    Verify Ollama's endpoint is http://127.0.0.1:11434. Remote provider
    configurations take precedence; remove obsolete built-in Ollama configs.
-4. Ask: "Suggest one small documentation improvement, apply it after approval,
+6. Ask: "Suggest one small documentation improvement, apply it after approval,
    then run an existing relevant test if available." Review tool approvals and
    the resulting diff; keep changes only if you want them.
-5. For metered cloud Copilot: Manage (gear) > Profiles > your previous profile
+7. For metered cloud Copilot: Manage (gear) > Profiles > your previous profile
    (usually Default), then select a cloud model in Chat. Your normal account,
    plan and organization policy apply. Return via Profiles > Local AI and
    explicitly select $script:LocalModel again. Profiles are not billing boundaries.

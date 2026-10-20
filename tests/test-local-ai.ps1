@@ -363,6 +363,8 @@ try {
         Assert-True ($source -match "'--profile', 'Local AI', '--install-extension', 'Ollama.ollama'") 'Ollama extension not profile-scoped'
         Assert-True ($source -match "'--new-window', '--profile', 'Local AI'\)") 'Profile creation launch is missing'
         Assert-True ($source -notmatch 'Full path to an existing locally checked-out repository') 'Still asks for a repository path'
+        Assert-True ($source.Contains('separate model picker at the bottom of the Chat input')) 'Instructions confuse Agent mode with model selection'
+        Assert-True ($source.Contains('Restricted Mode can hide local models')) 'Missing workspace-trust warning'
         Assert-True ($source -notmatch 'Invoke-Expression|Set-ExecutionPolicy|AdapterRAM\s*=') 'Unexpected unsafe/global behavior'
         Assert-True ($source.Contains('checks the exact Ollama tag')) 'Missing exact-tag preflight explanation'
         Assert-True ($source.Contains('reused without pulling it again')) 'Missing installed-model reuse explanation'

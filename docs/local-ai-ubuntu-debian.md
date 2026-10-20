@@ -43,9 +43,9 @@ bash ./scripts/setup-local-ai.sh
    guided import alternative. It starts Ollama if needed.
 4. **Open or clone a repository.** The wizard configures a separate **Local AI**
    profile with bundled Copilot Chat and the official Ollama extension.
-   Follow the final UI steps: choose **Agent**,
-   explicitly select the local Ollama model, and set utility models to local
-   choices. Approve tools individually; try a small documentation edit and an
+   In Chat, choose **Agent** in the mode control and the local model from the
+   separate model picker. Set utility models locally. Approve tools; try a
+   small documentation edit and an
    existing test, then inspect the diff.
 
 ## Switch local or cloud

@@ -103,7 +103,8 @@ For each platform, exercise these steps:
 5. Verify extensions are enabled in Local AI, original profile settings are
    unchanged, and your selected existing checkout opens. Trust it manually.
    Run **Ollama: Diagnose Models** to confirm the loopback endpoint and alias.
-6. Choose Agent and the exact local alias, configure local utility models, and
+6. Choose Agent in the Chat mode control and the exact local alias in the
+   separate model picker at the bottom of the Chat input. Configure local utility models and
    approve a small edit and existing relevant test. Review the diff and
    tool approvals. Do not disable approval safeguards.
 7. Switch to the previous profile and a cloud model, then back to Local AI

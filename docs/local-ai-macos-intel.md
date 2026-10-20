@@ -43,9 +43,9 @@ bash ./scripts/setup-local-ai.sh
 4. **Use the Local AI profile.** Copilot Chat is bundled with supported VS Code.
    The wizard installs the Ollama extension in Local AI. Open or clone a
    repository there.
-   Follow the final UI instructions: choose **Agent**, explicitly select your
-   `local-ai-...` Ollama model, and choose local utility models in Settings.
-   Review and approve tools individually. Start with a documentation
+   In Chat, choose **Agent** in the mode control and your `local-ai-...` model
+   from the model picker. Choose local utility models in Settings.
+   Review tools individually. Start with a documentation
    edit and an existing test.
 
 ## Switch local or cloud
