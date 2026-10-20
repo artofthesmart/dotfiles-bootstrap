@@ -34,9 +34,10 @@ $script:Work = $script:Fixture
 $script:State = $script:Fixture
 $script:Code = 'fixture-code'
 $script:Ollama = 'fixture-ollama'
-$script:Context = 8192
+$script:Context = 65536
 $script:LocalModel = 'fixture-model'
 $script:Answers = [Collections.Generic.Queue[string]]::new()
+$script:Questions = [Collections.Generic.List[string]]::new()
 $script:Calls = [Collections.Generic.List[object]]::new()
 $script:Mode = 'ok'
 $script:ToolCheckPassed = $false
@@ -47,6 +48,7 @@ function Get-PromptPath {
 }
 
 function Read-Choice([string]$Message) {
+    $script:Questions.Add($Message)
     if ($script:Answers.Count -eq 0) { throw "Fixture ran out of answers: $Message" }
     $answer = $script:Answers.Dequeue()
     if ($answer -ceq 'q') { throw [OperationCanceledException]::new('Setup cancelled.') }
@@ -65,7 +67,12 @@ function Invoke-OllamaApi([string]$Endpoint, $Body = $null) {
     if ($Endpoint -eq 'show') {
         if ($script:Mode -eq 'remote') { return [pscustomobject]@{ remote_host = 'https://example.invalid'; capabilities = @('tools') } }
         if ($script:Mode -eq 'no-tools') { return [pscustomobject]@{ capabilities = @('completion') } }
-        return [pscustomobject]@{ capabilities = @('completion', 'tools') }
+        if ($script:Mode -eq 'info-context') {
+            return [pscustomobject]@{ capabilities = @('tools'); model_info = [pscustomobject]@{ 'general.architecture' = 'qwen2'; 'qwen2.context_length' = 32768 } }
+        }
+        if ($script:Mode -eq 'unknown-context') { return [pscustomobject]@{ capabilities = @('tools') } }
+        $limit = if ($script:Mode -eq 'short-context') { 32768 } else { 131072 }
+        return [pscustomobject]@{ capabilities = @('completion', 'tools'); details = [pscustomobject]@{ context_length = $limit } }
     }
     if ($Endpoint -eq 'chat') {
         $script:LastBody = $Body
@@ -114,15 +121,21 @@ try {
         Assert-True ($text -match 'GPU memory: Unknown') 'Unknown VRAM not preserved'
         Assert-True ($text -notmatch 'DO-NOT-SHARE|AdapterRAM: 1') 'Hardware prompt leaked an excluded field'
         Assert-True ($text -match 'TOOL CALLING') 'No tool capability requirement'
-        Assert-True ($text -match '(?m)^MODEL: .+\r?\nCONTEXT_TOKENS: .+\r?\nDOWNLOAD_GIB: ') 'Missing ordered copy-back block'
+        Assert-True ($text -match '(?m)^MODEL: .+\r?\nDOWNLOAD_GIB: .+\r?\nCONTEXT_TOKENS: ') 'Missing ordered copy-back block'
         Assert-True ($text -match 'before\r?\nany greeting') 'Copy-back block is not required first'
         Assert-True ($text -match 'structured Ollama API tool_calls') 'Missing structured tool-call evidence requirement'
+        Assert-True ($text.Contains('MANDATORY FOR THIS SETUP')) 'Missing required context emphasis'
+        Assert-True ($text.Contains('Do not lower context to make it fit')) 'Prompt permits lowering required context'
     }
     Test-Case 'Model acquisition creates context-budget alias' {
-        Set-Answers @('1', 'model:q4', '4', '16384', 'y')
+        $script:Questions.Clear()
+        Set-Answers @('1', 'model:q4', '4', '65536', 'y')
         Select-LocalModel
         Assert-True ($script:LocalModel -eq 'local-ai-model-q4') 'Wrong alias'
-        Assert-True ([IO.File]::ReadAllText((Join-Path $script:Work 'Modelfile')) -match 'num_ctx 16384') 'Missing context budget'
+        Assert-True ([IO.File]::ReadAllText((Join-Path $script:Work 'Modelfile')) -match 'num_ctx 65536') 'Missing context budget'
+        $fields = @($script:Questions | Where-Object { $_ -match '^(MODEL|DOWNLOAD_GIB|CONTEXT_TOKENS):' } |
+            ForEach-Object { ($_ -split ':')[0] })
+        Assert-True (($fields -join ',') -eq 'MODEL,DOWNLOAD_GIB,CONTEXT_TOKENS') 'Question order does not match Gemini copy-back order'
     }
     Test-Case 'Compatible GGUF file path containing spaces' {
         $gguf = Join-Path $script:Fixture 'weights with spaces.gguf'
@@ -150,6 +163,27 @@ try {
             Set-Answers $answers
             Assert-Throws { Select-LocalModel } 'numeric|integer'
         }
+    }
+    Test-Case 'Required context and model limit enforced without misleading alias' {
+        $script:Calls.Clear()
+        foreach ($context in @('8192', '32768', '65535')) {
+            Set-Answers @('1', 'model', '1', $context)
+            Assert-Throws { Select-LocalModel } 'at least 65536'
+        }
+        Set-Answers @('1', 'NONE')
+        Assert-Throws { Select-LocalModel } 'no suitable local model'
+        Assert-True ($script:Calls.Count -eq 0) 'Invalid context triggered download'
+        foreach ($mode in @('short-context', 'info-context')) {
+            $script:Mode = $mode
+            Set-Answers @('1', 'model', '1', '', 'y')
+            Assert-Throws { Select-LocalModel } '32768-token context'
+        }
+        Assert-True (@($script:Calls | Where-Object { $_.Arguments[0] -eq 'create' }).Count -eq 0) 'Created unsupported context alias'
+        $script:Mode = 'unknown-context'
+        Set-Answers @('1', 'model', '1', '', 'y')
+        Select-LocalModel
+        Assert-True ($script:Context -eq 65536) 'Default context is not 65536'
+        $script:Mode = 'ok'
     }
     Test-Case 'Remote and non-tool models rejected' {
         foreach ($mode in @('remote', 'no-tools')) {
@@ -241,7 +275,7 @@ $global:LASTEXITCODE = 0
         foreach ($run in @(1, 2)) {
             Install-Applications
             Wait-Ollama
-            Set-Answers @('', 'n', '', '1', 'model:q4', '4', '8192', 'y', 'y', $script:Fixture)
+            Set-Answers @('', 'n', '', '1', 'model:q4', '4', '65536', 'y', 'y', $script:Fixture)
             Write-HardwarePrompt
             Select-LocalModel
             Test-LocalModel

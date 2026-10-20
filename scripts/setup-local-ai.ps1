@@ -228,10 +228,11 @@ Free model-volume space: $free GiB
 REQUIRED RESPONSE FORMAT: Start your response with this copy-back block, before
 any greeting, explanation, heading, or analysis. Replace placeholders with values:
 MODEL: <exact local Ollama name:tag; no command, URL, backticks, or cloud model>
-CONTEXT_TOKENS: <integer tokens; e.g. 32768, not 32k>
 DOWNLOAD_GIB: <numeric additional storage estimate in GiB; no units>
+CONTEXT_TOKENS: <integer tokens, at least 65536; no commas or 64k shorthand>
 These are the values the user must copy into the setup wizard. Put MODEL first
-and CONTEXT_TOKENS second. Put ALL analysis, links, caveats and fallback choices
+then DOWNLOAD_GIB, then CONTEXT_TOKENS, matching its question order exactly.
+Put ALL analysis, links, caveats and fallback choices
 AFTER this block. Do not invent a runnable recommendation if none is suitable:
 use MODEL: NONE and explain the blocker afterward.
 
@@ -246,9 +247,15 @@ Require evidence of structured Ollama API tool_calls for the exact recommended
 variant/template, not just coding benchmarks, a tools label, or JSON in chat text.
 If exact-variant tool behavior is unverified, state that prominently after the
 copy-back block; do not promise VS Code Agent compatibility.
-The official VS Code Ollama extension recommends at least 65536 context tokens.
-If that will not fit, say explicitly that smaller-context agents are constrained;
-do not sacrifice OS/memory headroom or claim the machine meets that recommendation.
+MANDATORY FOR THIS SETUP: We need at least 65536 tokens of context for the
+VS Code Ollama extension. Recommend only models whose supported context window
+is at least 65536 AND whose weights plus KV cache at that context fit this
+hardware with OS/VS Code memory headroom. A small download alone is not enough.
+Do not recommend a 32768-context model and simply set num_ctx to 65536; setting
+a larger number does not establish model support. Verify any extended-context
+requirements against the exact model variant. Do not lower context to make it fit.
+If no suitable model fits, use MODEL: NONE, DOWNLOAD_GIB: N/A,
+CONTEXT_TOKENS: N/A in the first block and explain the hardware/support blocker.
 Prefer https://ollama.com/library models. If none fit, give an exact supported
 GGUF file and source page on https://huggingface.co, including architecture and
 chat-template/tool support caveats. Do not suggest executing repository code.
@@ -270,7 +277,7 @@ function Select-LocalModel {
     Write-Host 'Download it in Ollama Desktop:'
     Write-Host '  1. Open Ollama from the Start menu.'
     Write-Host '  2. Click the model selector and type the exact name Gemini recommended, including any size tag like :32b.'
-    Write-Host '     Example format: qwen2.5-coder:32b. Use YOUR recommended tool-capable model, not this example automatically.'
+    Write-Host '     Keep the exact tag Gemini gave you; a size tag alone does not establish tool or 65536-context support.'
     Write-Host '  3. Select the matching LOCAL model and click its download icon if shown. Do not choose a cloud model.'
     Write-Host '  4. In the message box, type "Say hello" and press Enter. If needed, Ollama downloads the model before replying.'
     Write-Host '  5. Wait for the download to finish and a reply to appear. Return here and enter that same model name.'
@@ -280,7 +287,7 @@ function Select-LocalModel {
     $source = Read-Choice 'Model source: 1 = Ollama Library (recommended), 2 = import a downloaded Hugging Face GGUF'
     $gguf = $null
     switch ($source) {
-        '1' { $script:Model = Read-Choice 'Paste the exact model name, including its size tag if shown (name only, without "ollama run")' }
+        '1' { $script:Model = Read-Choice 'MODEL: paste the exact model name and tag from Gemini (without "ollama run")' }
         '2' {
             Write-Host 'Download a compatible single-file GGUF yourself. Check license, architecture, quantization and tool/chat-template support.'
             $gguf = Read-Choice 'Full path to the downloaded single-file .gguf'
@@ -296,23 +303,21 @@ function Select-LocalModel {
         }
         default { throw 'Choose 1 or 2.' }
     }
+    if ($script:Model -eq 'NONE') { throw 'Gemini found no suitable local model for this hardware at 65536+ context. Review its explanation; do not download an unsuitable model.' }
     if (-not (Test-ModelName $script:Model)) { throw 'Use a simple model[:tag], not a command, URL, namespace or cloud model.' }
-    $sizeText = Read-Choice 'Expected additional model storage in GiB (include an extra copy for GGUF import; Enter if unknown)'
+    $sizeText = Read-Choice 'DOWNLOAD_GIB: paste the storage estimate from Gemini (number only; Enter if unknown; include an extra copy for GGUF import)'
     $size = 0.0
     if ($sizeText) {
         if ($sizeText -notmatch '^[0-9]+(\.[0-9]+)?$') { throw 'Size must be numeric GiB.' }
         $size = [double]::Parse($sizeText, [Globalization.CultureInfo]::InvariantCulture)
     } else { Write-Warning 'Download size unknown. Check the model page against available disk space.' }
     if ((Get-ModelVolume).AvailableFreeSpace -lt (($size + 2) * 1GB)) { throw 'Not enough model-volume space (allowing 2 GiB spare). Free space or choose a smaller model.' }
-    $contextText = Read-Choice 'Agent context tokens recommended by Gemini (Enter for conservative 8192)'
-    if (-not $contextText) { $contextText = '8192' }
-    if ($contextText -notmatch '^[0-9]{1,7}$' -or [int]$contextText -lt 2048 -or [int]$contextText -gt 1048576) {
-        throw 'Choose an integer context size from 2048 to 1048576.'
+    $contextText = Read-Choice 'CONTEXT_TOKENS: paste the context from Gemini (minimum 65536; Enter for 65536)'
+    if (-not $contextText) { $contextText = '65536' }
+    if ($contextText -notmatch '^[0-9]{1,7}$' -or [int]$contextText -lt 65536 -or [int]$contextText -gt 1048576) {
+        throw 'Choose an integer context size from 65536 to 1048576. This VS Code setup requires at least 65536; ask Gemini for a compatible model rather than reducing context.'
     }
     $script:Context = [int]$contextText
-    if ($script:Context -lt 65536) {
-        Write-Warning 'The Ollama VS Code extension recommends 65536+ context tokens. A smaller budget saves memory but limits agents and may trigger a VS Code warning.'
-    }
     if (-not (Confirm-Step "Acquire $script:Model with context ${script:Context}? Large downloads; existing models with this name may be updated/replaced")) { throw 'Model acquisition cancelled.' }
     $modelfile = Join-Path $script:Work 'Modelfile'
     if ($source -eq '1') {
@@ -326,6 +331,22 @@ function Select-LocalModel {
     foreach ($field in @('remote_host', 'remote_model')) {
         if ($metadata.PSObject.Properties[$field] -and $metadata.$field) { throw 'This model routes to cloud inference. Choose local model weights.' }
     }
+    $limits = @()
+    if ($metadata.PSObject.Properties['details'] -and $metadata.details.PSObject.Properties['context_length']) {
+        $limits += [long]$metadata.details.context_length
+    }
+    if ($metadata.PSObject.Properties['model_info']) {
+        $architecture = $metadata.model_info.PSObject.Properties['general.architecture']
+        if ($architecture) {
+            $contextLimit = $metadata.model_info.PSObject.Properties["$($architecture.Value).context_length"]
+            if ($contextLimit) { $limits += [long]$contextLimit.Value }
+        }
+    }
+    $limit = $limits | Where-Object { $_ -gt 0 } | Sort-Object | Select-Object -First 1
+    if ($null -ne $limit -and $script:Context -gt $limit) {
+        throw "This model advertises a $limit-token context window, below the requested $script:Context. Ask Gemini for a model supporting at least 65536; the downloaded files are preserved."
+    }
+    if ($null -eq $limit) { Write-Warning 'Ollama did not report a supported context limit. Verify 65536+ support on the exact model page before relying on this setup.' }
     if (-not $metadata.PSObject.Properties['capabilities'] -or @($metadata.capabilities) -notcontains 'tools') {
         throw 'Model does not advertise tool calling. Choose a tool-capable model.'
     }
@@ -492,5 +513,5 @@ function Start-LocalAISetup {
 if ($MyInvocation.InvocationName -ne '.') {
     try { Start-LocalAISetup }
     catch [OperationCanceledException] { Write-Host 'Setup cancelled; rerun whenever ready.'; exit 0 }
-    catch { Write-Error "Setup stopped: $($_.Exception.Message). Check Ollama logs for inference errors; try a smaller model/context if memory or timeout is the issue." -ErrorAction Continue; exit 1 }
+    catch { Write-Error "Setup stopped: $($_.Exception.Message)" -ErrorAction Continue; exit 1 }
 }
