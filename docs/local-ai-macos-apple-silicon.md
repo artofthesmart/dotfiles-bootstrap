@@ -35,14 +35,15 @@ bash ./scripts/setup-local-ai.sh
    The wizard gets exact size, fixes context at `65536`, and checks
    out-of-catalog tags before download. It checks
    free disk and shows a review. Already-installed models are
-   reused without updating. The downloaded model also appears in Ollama.
-   The wizard checks advertised tools and a harmless structured tool call.
+   reused without updating. The wizard tests tools and verifies
+   Ollama allocated 65K. If it reports 32K, set Ollama **Settings > Context
+   length** to 64K, restart it, and rerun.
 4. **Open your repository.** Copilot Chat is bundled with supported VS Code.
    The wizard installs the official Ollama extension into a separate **Local AI**
    profile. Open or clone a repository there.
-   Follow its final instructions: select **Agent**, explicitly choose your
-   `local-ai-...` Ollama model, and set the two utility-model settings to local
-   models too. Approve tools individually and review changes.
+   In Chat, choose **Agent** in the mode control and your `local-ai-...` model
+   with the sparkle model-picker icon. Set both utility models locally too.
+   If warned about 128 tools, use **Configure Tools** and disable unused groups.
 
 ## Switch local or cloud
 

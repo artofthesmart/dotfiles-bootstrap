@@ -38,15 +38,16 @@ bash ./scripts/setup-local-ai.sh
    the exact size itself, fixes context at `65536`, rejects out-of-catalog
    recommendations before a large pull, checks free disk, and shows a final
    review. Installed models are reused without updating.
-   It creates a `local-ai-...` context-budget model and checks a harmless
-   structured tool call. Compatible manually downloaded GGUF files have a
-   guided import alternative. It starts Ollama if needed.
+   It creates a `local-ai-...` model, tests structured tools, and verifies Ollama
+   allocated 65K. If it reports 32K, set Ollama's Context length to 64K, restart
+   it, and rerun. Compatible GGUF files have a guided import alternative.
 4. **Open or clone a repository.** The wizard configures a separate **Local AI**
    profile with bundled Copilot Chat and the official Ollama extension.
-   Follow the final UI steps: choose **Agent**,
-   explicitly select the local Ollama model, and set utility models to local
-   choices. Approve tools individually; try a small documentation edit and an
+   In Chat, choose **Agent** in the mode control and the local model with the
+   sparkle model-picker icon. Set utility models locally. Approve tools; try a
+   small documentation edit and an
    existing test, then inspect the diff.
+   If warned about 128 tools, use **Configure Tools** and disable unused groups.
 
 ## Switch local or cloud
 

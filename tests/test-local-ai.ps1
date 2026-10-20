@@ -91,6 +91,12 @@ function Invoke-OllamaApi([string]$Endpoint, $Body = $null) {
             [pscustomobject]@{ function = [pscustomobject]@{ name = 'get_temperature'; arguments = [pscustomobject]@{ city = $value } } }
         ) } }
     }
+    if ($Endpoint -eq 'ps') {
+        $allocated = if ($script:Mode -eq 'small-allocation') { 32768 } else { 65536 }
+        return [pscustomobject]@{ models = @(
+            [pscustomobject]@{ name = "$($script:LocalModel):latest"; context_length = $allocated }
+        ) }
+    }
     return [pscustomobject]@{ version = 'fixture' }
 }
 function Get-ModelVolume {
@@ -191,6 +197,9 @@ try {
         Assert-True ($text -match 'GPU memory: Unknown') 'Unknown VRAM not preserved'
         Assert-True ($text -notmatch 'DO-NOT-SHARE|AdapterRAM: 1') 'Hardware prompt leaked an excluded field'
         Assert-True ($text -match 'TOOL CALLING') 'No tool capability requirement'
+        Assert-True ($text.Contains('accept at least 128 tool definitions')) 'Missing wide tool-set requirement'
+        Assert-True ($text.Contains('Basic single-tool support is not enough')) 'Prompt overstates basic tool support'
+        Assert-True ($text.Contains('tool-definition limit or large-tool-set reliability')) 'Missing tool-limit uncertainty rule'
         Assert-True ($text -match '(?m)^MODEL: .+$') 'Missing MODEL copy-back line'
         Assert-True ($text.Contains('only value the user must copy')) 'Prompt still asks for redundant values'
         Assert-True ($text -match 'before\r?\nany greeting') 'Copy-back block is not required first'
@@ -206,6 +215,7 @@ try {
         Assert-True (@($script:Questions | Where-Object { $_ -match 'Optional GPU memory' }).Count -eq 0) 'Still asks for ambiguous shared VRAM'
         Assert-True ($text.Contains('MANDATORY FOR THIS SETUP')) 'Missing required context emphasis'
         Assert-True ($text.Contains('Do not lower context to make it fit')) 'Prompt permits lowering required context'
+        Assert-True ($text.Contains("VS Code's separate need to disable tools")) 'Model and harness tool limits are conflated'
     }
     Test-Case 'Installed capacity is not confused with smaller Windows-visible memory' {
         $script:Mode = '96gb-installed'
@@ -322,9 +332,14 @@ try {
     }
     Test-Case 'Actual valid tool-call output checked' {
         Test-LocalModel
-        Assert-True ($script:LastBody.options.num_ctx -eq $script:Context) 'Wrong inference context'
+        Assert-True (-not $script:LastBody.options.ContainsKey('num_ctx')) 'Smoke test masks the server default context'
         Assert-True ($script:LastBody.tools[0].function.name -eq 'get_temperature') 'Wrong tool'
         Assert-True ($script:LastBody.messages[0].content -eq 'What is the temperature in New York?') 'Not using documented natural-language tool request'
+    }
+    Test-Case 'Server default context below minimum is rejected' {
+        $script:Mode = 'small-allocation'
+        Assert-Throws { Test-LocalModel } 'allocated only 32768[\s\S]*Ollama app[\s\S]*64K'
+        $script:Mode = 'ok'
     }
     Test-Case 'Absent wrong malformed and HTTP-error tool responses fail' {
         foreach ($mode in @('no-call', 'wrong-call', 'json-prose', 'malformed', 'http-error')) {
@@ -363,6 +378,12 @@ try {
         Assert-True ($source -match "'--profile', 'Local AI', '--install-extension', 'Ollama.ollama'") 'Ollama extension not profile-scoped'
         Assert-True ($source -match "'--new-window', '--profile', 'Local AI'\)") 'Profile creation launch is missing'
         Assert-True ($source -notmatch 'Full path to an existing locally checked-out repository') 'Still asks for a repository path'
+        Assert-True ($source.Contains('sparkle icon at the bottom of the Chat input')) 'Missing actual model-picker icon'
+        Assert-True ($source.Contains('Restricted Mode can hide local models')) 'Missing workspace-trust warning'
+        Assert-True ($source.Contains('model supports only 128 tools')) 'Missing tool-limit recovery'
+        Assert-True ($source.Contains('Disable unneeded MCP servers')) 'Missing tool-selection guidance'
+        Assert-True ($source.Contains('github.copilot.chat.virtualTools.threshold')) 'Missing virtual-tool alternative'
+        Assert-True ($source.Contains('$env:OLLAMA_CONTEXT_LENGTH = [string]$script:Context')) 'New Ollama servers do not inherit 65536 context'
         Assert-True ($source -notmatch 'Invoke-Expression|Set-ExecutionPolicy|AdapterRAM\s*=') 'Unexpected unsafe/global behavior'
         Assert-True ($source.Contains('checks the exact Ollama tag')) 'Missing exact-tag preflight explanation'
         Assert-True ($source.Contains('reused without pulling it again')) 'Missing installed-model reuse explanation'

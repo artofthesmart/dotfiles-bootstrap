@@ -103,7 +103,8 @@ For each platform, exercise these steps:
 5. Verify extensions are enabled in Local AI, original profile settings are
    unchanged, and your selected existing checkout opens. Trust it manually.
    Run **Ollama: Diagnose Models** to confirm the loopback endpoint and alias.
-6. Choose Agent and the exact local alias, configure local utility models, and
+6. Choose Agent in the Chat mode control and the exact local alias in the
+   sparkle-icon model picker at the bottom of the Chat input. Configure local utility models and
    approve a small edit and existing relevant test. Review the diff and
    tool approvals. Do not disable approval safeguards.
 7. Switch to the previous profile and a cloud model, then back to Local AI
@@ -167,6 +168,17 @@ For each platform, exercise these steps:
   supported window does not prove extended-context support. Exact installed
   source models are reused without a pull/update. Existing aliases can be
   replaced after confirmation; source weights are reused for the alias.
+  The live smoke test deliberately omits a per-request `num_ctx`, then reads
+  `/api/ps` and requires an actual allocation of at least 65536. This mirrors the
+  official VS Code extension instead of masking Ollama's server-wide default.
+  The wizard exports `OLLAMA_CONTEXT_LENGTH=65536` before starting a new Ollama
+  server. It does not silently restart or rewrite an already-running desktop app
+  or system service, so the allocation check remains required.
+  Current Ollama defaults 24-48 GiB VRAM systems to 32K. If detected, set the
+  Ollama app's **Settings > Context length** to at least 64K, restart Ollama, and
+  rerun. For a service, start `ollama serve` with
+  `OLLAMA_CONTEXT_LENGTH=65536`. Verify the exact `local-ai-...` alias, not its
+  base model, appears in `ollama ps`.
   If nothing fits at 65536+, Gemini must return `MODEL: NONE` and explain why,
   rather than recommending a 32K model or lowering the context. Entering NONE
   stops the wizard with that explanation instead of trying to download it.
@@ -204,6 +216,14 @@ For each platform, exercise these steps:
   Remove deprecated built-in Ollama provider configuration in the Local AI
   profile; provider-specific configuration can override its endpoint setting.
   Enable `chat.agentHost.byokModels.enabled` if required for your harness.
+- **More than 128 tools:** the Local harness can send at most 128 enabled tools
+  in one request. Select **Configure Tools** in the Chat input and disable
+  unneeded MCP servers or extension tool groups. Keep the core file/search/edit,
+  terminal, problems/test and Git tools required for the current coding task.
+  Enabling tools remains separate from approving their use. VS Code also offers
+  the experimental `github.copilot.chat.virtualTools.threshold` setting for
+  automatic grouping, but explicit selection is more predictable with local
+  models and makes the available capabilities easier to review.
 - **Metered utility tasks:** the chat model does not automatically control
   background utility models. In Local AI's Settings, choose the local model
   for `chat.utilityModel` and `chat.utilitySmallModel`. Do not leave cloud

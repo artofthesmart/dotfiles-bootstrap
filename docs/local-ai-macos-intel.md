@@ -32,20 +32,21 @@ bash ./scripts/setup-local-ai.sh
    storage, not repository contents. The wizard verifies an exact-tag
    catalog with 65K+ GGUF context; Gemini must choose from that list or return
    `MODEL: NONE`. It compares CPU-only fit, a smaller fallback and license caveats.
-   No information is sent automatically; Gemini's recommendation is not proof
-   that a model will be fast or useful.
+   Nothing is sent automatically; Gemini does not prove model performance.
 3. **Verify and download.** Paste only Gemini's exact listed model tag. The
    wizard gets the exact size itself, fixes context at `65536`, and rejects
    out-of-catalog tags before download. It
-   checks free disk and shows a review. Installed models are reused without updating;
-   new downloads also appear in Ollama. The wizard then checks advertised tools
-   and a harmless structured tool call. CPU-only performance may still be poor.
+   checks free disk and shows a review. Installed models are reused. The wizard
+   tests structured tools and verifies Ollama allocated 65K. If it reports 32K,
+   set Ollama **Settings > Context length** to 64K, restart it, and rerun.
+   CPU-only performance may still be poor.
 4. **Use the Local AI profile.** Copilot Chat is bundled with supported VS Code.
    The wizard installs the Ollama extension in Local AI. Open or clone a
    repository there.
-   Follow the final UI instructions: choose **Agent**, explicitly select your
-   `local-ai-...` Ollama model, and choose local utility models in Settings.
-   Review and approve tools individually. Start with a documentation
+   In Chat, choose **Agent** in the mode control and your `local-ai-...` model
+   with the sparkle icon. Choose utility models in Settings.
+   If warned about 128 tools, use **Configure Tools** and disable unused groups.
+   Review tools individually. Start with a documentation
    edit and an existing test.
 
 ## Switch local or cloud

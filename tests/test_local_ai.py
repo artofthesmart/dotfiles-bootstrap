@@ -23,11 +23,20 @@ class OllamaFixture(http.server.BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
-        self.send_json({"version": "0.40.6"})
+        if self.path == "/api/ps":
+            context = 32768 if self.server.mode == "small-allocation" else 65536
+            self.send_json({"models": [{
+                "name": getattr(self.server, "loaded_model", "local-ai-model") + ":latest",
+                "context_length": context,
+            }]})
+        else:
+            self.send_json({"version": "0.40.6"})
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         self.server.requests.append((self.path, body))
+        if self.path == "/api/chat":
+            self.server.loaded_model = body["model"]
         if self.server.mode == "http-error":
             self.send_error(500, "fixture failure")
             return
@@ -233,7 +242,7 @@ class WizardTests(unittest.TestCase):
         self.assertIn(["ollama", "pull", "model:q4"], self.calls("ollama"))
         chat = next(body for path, body in self.server.requests if path == "/api/chat")
         self.assertEqual(chat["model"], "local-ai-model-q4")
-        self.assertEqual(chat["options"]["num_ctx"], 65536)
+        self.assertNotIn("num_ctx", chat["options"])
         self.assertIn("tool-call check passed", result.stdout)
         self.assertIn("Detected an Ollama Library model name", result.stdout)
         self.assertIn("Verified review", result.stdout)
@@ -279,7 +288,7 @@ class WizardTests(unittest.TestCase):
         result = self.run_shell("choose_model; check_model", "model\ny\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         chat = next(body for path, body in self.server.requests if path == "/api/chat")
-        self.assertEqual(chat["options"]["num_ctx"], 65536)
+        self.assertNotIn("num_ctx", chat["options"])
         self.assertNotIn("DOWNLOAD_GIB: paste", result.stdout)
         self.assertNotIn("CONTEXT_TOKENS: paste", result.stdout)
 
@@ -297,6 +306,14 @@ class WizardTests(unittest.TestCase):
         result = self.run_shell("choose_model", "model\ny\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("did not report a supported context limit", result.stdout)
+
+    def test_server_default_context_below_minimum_is_rejected(self):
+        self.server.mode = "small-allocation"
+        result = self.run_shell('LOCAL_MODEL=model; CONTEXT=65536; check_model')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("allocated only 32768", result.stderr)
+        self.assertIn("Ollama app", result.stderr)
+        self.assertIn("64K", result.stderr)
 
     def test_no_suitable_recommendation_stops_before_download(self):
         result = self.run_shell("choose_model", "NONE\n")
@@ -366,8 +383,12 @@ class WizardTests(unittest.TestCase):
         self.assertIn("only value the user must copy", prompt)
         self.assertIn("before\nany greeting", prompt)
         self.assertIn("structured Ollama API tool_calls", prompt)
+        self.assertIn("accept at least 128 tool definitions", prompt)
+        self.assertIn("Basic single-tool support is not enough", prompt)
+        self.assertIn("tool-definition limit or large-tool-set reliability", prompt)
         self.assertIn("MANDATORY FOR THIS SETUP", prompt)
         self.assertIn("Do not lower context to make it fit", prompt)
+        self.assertIn("VS Code's separate need to disable tools", prompt)
         self.assertIn("ONLY allowed Ollama Library recommendations", prompt)
         self.assertIn("llama3.1:8b", prompt)
         self.assertNotIn("qwen2.5-coder", prompt)
@@ -545,10 +566,20 @@ class WizardTests(unittest.TestCase):
             os.close(master)
         self.assertEqual(process.returncode, 0, output.decode(errors="replace"))
         self.assertIn(b"VS Code Agent behavior still needs your confirmation", output)
+        self.assertIn(b"sparkle icon at the bottom of the Chat input", output)
+        self.assertIn(b"Restricted Mode can hide local models", output)
+        self.assertIn(b"model supports only 128 tools", output)
+        self.assertIn(b"Disable unneeded MCP servers", output)
+        self.assertIn(b"github.copilot.chat.virtualTools.threshold", output)
         for row in self.calls("code"):
             if "--install-extension" in row:
                 self.assertIn("Local AI", row)
         self.assertTrue(self.prompt.exists())
+
+    def test_new_ollama_server_inherits_required_context(self):
+        main = SCRIPT.read_text().split("main() {", 1)[1]
+        self.assertIn("export OLLAMA_CONTEXT_LENGTH=$CONTEXT", main)
+        self.assertLess(main.index("export OLLAMA_CONTEXT_LENGTH=$CONTEXT"), main.index("ensure_server"))
 
 
 if __name__ == "__main__":
