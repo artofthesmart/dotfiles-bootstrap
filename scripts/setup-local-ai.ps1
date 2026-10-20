@@ -194,8 +194,17 @@ function Get-PromptPath {
 function Write-HardwarePrompt {
     $osInfo = Get-CimInstance Win32_OperatingSystem
     $processors = @(Get-CimInstance Win32_Processor | Select-Object -ExpandProperty Name)
-    $ramBytes = (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory
+    $visibleBytes = (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory
+    $modules = @(Get-CimInstance Win32_PhysicalMemory -Property Capacity)
+    if ($modules.Count -eq 0) {
+        throw 'Installed RAM capacity could not be read from Windows memory-device records. Check your hardware information.'
+    }
+    $ramBytes = ($modules | Measure-Object -Property Capacity -Sum).Sum
+    if ($null -eq $ramBytes -or $ramBytes -le 0) {
+        throw 'Installed RAM capacity could not be read from Windows memory-device records. Do not treat Windows-visible memory as installed capacity; check your hardware information.'
+    }
     $ram = [math]::Round($ramBytes / 1GB, 1)
+    $visibleRam = [math]::Round($visibleBytes / 1GB, 1)
     $sharedCeiling = [math]::Round($ramBytes / 2GB, 1)
     $gpuNames = @(Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name)
     $gpu = $gpuNames -join '; '
@@ -211,25 +220,32 @@ function Write-HardwarePrompt {
         } else { Write-Warning 'nvidia-smi failed. GPU memory/acceleration is unknown.' }
     }
     Write-Host "GPU information: $gpu"
-    Write-Host "System RAM: $ram GiB. If using an integrated GPU, shared memory is variable, not a fixed extra pool."
-    Write-Host "For iGPU planning, use up to 50% of system RAM ($sharedCeiling GiB), not guaranteed available memory."
+    Write-Host "Installed RAM: $ram GiB. Windows-visible RAM: $visibleRam GiB (not installed capacity or currently free memory)."
+    Write-Host "For iGPU planning, 50% of installed RAM is $sharedCeiling GiB; actual availability depends on Windows and the driver."
     $free = [math]::Round((Get-ModelVolume).AvailableFreeSpace / 1GB, 1)
     $promptText = @"
 Recommend a practical LOCAL Ollama coding model for VS Code Agent mode.
 OS: $($osInfo.Caption), version $($osInfo.Version); architecture: x64
 CPU: $($processors -join '; ')
-RAM: $ram GiB
+Installed physical RAM: $ram GiB (sum of memory-device capacities)
+Windows-visible physical RAM: $visibleRam GiB (not installed capacity or currently free RAM)
 GPU: $gpu
 GPU memory: $vram
-Windows iGPU planning ceiling: up to 50% of system RAM ($sharedCeiling GiB), shared dynamically
+Windows iGPU planning ceiling: up to 50% of installed RAM ($sharedCeiling GiB), shared dynamically; actual availability unverified
 Acceleration: $acceleration
 Free model-volume space: $free GiB
 
 MEMORY ACCOUNTING RULES:
-If this machine uses an integrated GPU/APU, use system RAM above as ONE physical
-pool. Up to 50% of system RAM could be made available for running Ollama models;
+If this machine uses an integrated GPU/APU, use installed RAM above as ONE physical
+pool. Up to 50% of installed RAM could be made available for running Ollama models;
 use that as a planning ceiling, NOT a fixed reservation, currently free memory,
 extra dedicated VRAM, or a guaranteed driver/Ollama allocation.
+Installed capacity and Windows-visible memory are DIFFERENT measurements.
+Do not relabel Windows-visible memory as installed capacity. If they differ,
+the cause is unknown here; do not infer that the difference is GPU-reserved or
+currently available to the model. Do not assume installing 96 GiB means all
+96 GiB is presently usable by Windows or Ollama. Reconcile visible-memory and
+actual driver/runtime limits before claiming a model fits.
 Do not infer a BIOS carve-out or fixed GPU allocation from the GPU model name.
 Do not add shared GPU memory to RAM or subtract it as a permanently reserved pool.
 Budget model weights, KV cache at 65536+ context, runtime overhead and OS/editor

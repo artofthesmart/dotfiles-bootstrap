@@ -135,6 +135,7 @@ mocked test success is not proof of platform compatibility.
 | Loopback API `/api/version`, `/api/show`, `/api/chat`, cloud metadata and tool-call validation | [Official API reference](https://github.com/ollama/ollama/blob/main/docs/api.md), [response types](https://github.com/ollama/ollama/blob/main/api/types.go) |
 | Natural-language `get_temperature` smoke test; no actual tool execution | [Ollama tool-calling example](https://docs.ollama.com/capabilities/tool-calling) |
 | Windows dynamic shared-memory accounting; 50% of system RAM used only as a planning ceiling, not an Ollama guarantee | [Microsoft DirectX: GPUs in Task Manager](https://devblogs.microsoft.com/directx/gpus-in-the-task-manager/) |
+| Installed RAM is summed from memory-device capacities and labelled separately from Windows-visible RAM | [Win32_PhysicalMemory.Capacity](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-physicalmemory), [TotalPhysicalMemory caveat](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-computersystem) |
 | Optional jq 1.8.2 standalone binary, installed privately, checked against embedded architecture-specific SHA-256 | [jq downloads](https://jqlang.org/download/), [upstream checksums](https://raw.githubusercontent.com/jqlang/jq/master/sig/v1.8.2/sha256sum.txt) |
 
 The wizard does not call Gemini: it prepares an allowlisted prompt for the user

@@ -102,9 +102,16 @@ For each platform, exercise these steps:
 
 ## Scope and recovery
 
-- **Windows iGPU memory:** report system RAM as one physical pool and use up to
+- **Windows iGPU memory:** report installed RAM from the sum of
+  `Win32_PhysicalMemory.Capacity`, separately from Windows-visible
+  `Win32_ComputerSystem.TotalPhysicalMemory`. The latter can exclude reserved
+  memory and must not be labelled installed capacity. Neither is free RAM.
+  Fail explicitly if installed capacity cannot be determined; do not substitute
+  a smaller Windows-visible number. Do not infer the cause of a discrepancy.
+  Treat installed RAM as one physical pool and use up to
   50% as a dynamic shared-memory planning ceiling, not fixed VRAM or guaranteed
-  Ollama capacity. The Windows wizard no longer asks for an ambiguous GPU-memory
+  Ollama capacity. Actual Windows/driver availability still constrains models.
+  The Windows wizard no longer asks for an ambiguous GPU-memory
   amount. Gemini must not infer BIOS reservations, add shared memory to RAM,
   promise exact free RAM, or assume full GPU offload. Dedicated NVIDIA memory
   remains separately identified when detected. The 50% rule is not applied to
