@@ -1,10 +1,11 @@
 GO ?= go
+GOFMT ?= gofmt
 VERSION ?= dev
 COMMIT ?= none
 DATE ?= unknown
 LDFLAGS := -X main.Version=$(VERSION) -X main.Commit=$(COMMIT) -X main.Date=$(DATE)
 
-.PHONY: build test race integration test-race test-integration vet fmt-check cross-build clean
+.PHONY: build test race integration test-race test-integration vet fmt-check catalog-drift cross-build clean
 
 build:
 	@mkdir -p build
@@ -27,7 +28,10 @@ vet:
 	$(GO) vet ./...
 
 fmt-check:
-	@test -z "$$(find cmd internal -name '*.go' -type f -exec gofmt -l {} +)"
+	@test -z "$$(find catalog cmd internal -name '*.go' -type f -exec $(GOFMT) -l {} +)"
+
+catalog-drift:
+	$(GO) run ./cmd/catalog-drift -pretty
 
 cross-build:
 	@mkdir -p build

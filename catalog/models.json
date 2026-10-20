@@ -1,0 +1,756 @@
+{
+  "schema_version": "local-ai.model-catalog/v1",
+  "catalog_version": "1.0.0",
+  "reviewed_at": "2026-10-20",
+  "entries": [
+    {
+      "id": "devstral-small-2-24b-q4km",
+      "status": "deprecated",
+      "model": {
+        "ollama_name": "devstral-small-2:24b-instruct-2512-q4_K_M",
+        "family": "Devstral Small 2",
+        "parameter_scale_billion": 24,
+        "quantization": "Q4_K_M",
+        "architecture": "mistral3"
+      },
+      "source": {
+        "publisher": "Mistral AI",
+        "model_page": "https://ollama.com/library/devstral-small-2:24b-instruct-2512-q4_K_M",
+        "registry_manifest": "https://registry.ollama.ai/v2/library/devstral-small-2/manifests/24b-instruct-2512-q4_K_M",
+        "expected_model_digest": "sha256:c580819bed79c92d01a42227bd6d8fd66b9ec60d5329f5eb73f812f156af7807"
+      },
+      "download": {
+        "minimum_bytes": 15100000000,
+        "maximum_bytes": 15250000000
+      },
+      "context": {
+        "advertised_native_tokens": 393216,
+        "required_tokens": 65536,
+        "verification_method": "both",
+        "extended_context_requirements": [
+          "The manager configures only 65,536 tokens; larger advertised limits require separate memory validation.",
+          "Runtime /api/ps evidence remains authoritative for the allocated context."
+        ]
+      },
+      "tools": {
+        "advertised": true,
+        "evidence_level": "official_claim",
+        "structured_call_verified": false,
+        "large_tool_set": {
+          "status": "claimed",
+          "tested_definition_count": null
+        },
+        "complex_schema": "claimed",
+        "known_template_caveats": [
+          "Runtime structured-call acceptance is required before setup succeeds.",
+          "Tool-count limits in the client are independent of model capability."
+        ],
+        "evidence_references": [
+          "https://ollama.com/library/devstral-small-2",
+          "https://huggingface.co/mistralai/Devstral-Small-2-24B-Instruct-2512"
+        ]
+      },
+      "ollama_compatibility": {
+        "minimum_version": "0.12.0",
+        "maximum_tested_version": "0.40.6"
+      },
+      "license": {
+        "identifier": "Apache-2.0",
+        "name": "Apache License 2.0",
+        "commercial_use": "allowed",
+        "summary": "Upstream distributes the model under Apache-2.0, which generally permits commercial use subject to its terms; this summary is not legal advice.",
+        "source": "https://mistral.ai/news/devstral-2-vibe-cli/"
+      },
+      "eligibility": {
+        "operating_systems": ["windows", "macos", "linux"],
+        "architectures": ["amd64", "arm64"],
+        "execution_modes": ["cpu_only", "apple_unified", "integrated_shared", "dedicated_gpu"],
+        "disqualifiers": [
+          "unsupported_architecture",
+          "cloud_only",
+          "native_context_below_minimum",
+          "license_incompatible",
+          "tool_capability_failed",
+          "insufficient_disk",
+          "insufficient_memory_headroom",
+          "ollama_version_incompatible",
+          "blocked_status"
+        ]
+      },
+      "host_tiers": [
+        {
+          "execution_mode": "cpu_only",
+          "minimum_system_memory_bytes": 51539607552,
+          "minimum_accelerator_memory_bytes": null,
+          "minimum_free_storage_bytes": 25769803776,
+          "expected_offload": "cpu",
+          "notes": ["CPU execution is eligible but may be too slow for comfortable agent loops."]
+        },
+        {
+          "execution_mode": "apple_unified",
+          "minimum_system_memory_bytes": 42949672960,
+          "minimum_accelerator_memory_bytes": null,
+          "minimum_free_storage_bytes": 25769803776,
+          "expected_offload": "full_gpu",
+          "notes": ["Unified memory is one pool and is never added to a separate VRAM amount."]
+        },
+        {
+          "execution_mode": "integrated_shared",
+          "minimum_system_memory_bytes": 51539607552,
+          "minimum_accelerator_memory_bytes": null,
+          "minimum_free_storage_bytes": 25769803776,
+          "expected_offload": "unknown",
+          "notes": ["Shared graphics memory is one system-memory pool; actual offload must be measured."]
+        },
+        {
+          "execution_mode": "dedicated_gpu",
+          "minimum_system_memory_bytes": 25769803776,
+          "minimum_accelerator_memory_bytes": 17179869184,
+          "minimum_free_storage_bytes": 25769803776,
+          "expected_offload": "partial_gpu",
+          "notes": ["Full offload generally requires more accelerator memory than this minimum; runtime evidence decides."]
+        }
+      ],
+      "memory_estimate": {
+        "formula_version": 1,
+        "model_weights_bytes": {
+          "minimum_bytes": 15100000000,
+          "maximum_bytes": 15250000000
+        },
+        "kv_cache_bytes_per_token": {
+          "minimum_bytes": 98304,
+          "maximum_bytes": 163840
+        },
+        "runtime_overhead_bytes": {
+          "minimum_bytes": 2147483648,
+          "maximum_bytes": 4294967296
+        },
+        "minimum_os_editor_headroom_bytes": 8589934592
+      },
+      "recommendation": {
+        "agent_reliability_tier": 5,
+        "tool_schema_tier": 5,
+        "cpu_fallback_tier": 2,
+        "score_adjustments": [
+          {
+            "reason": "Upstream lifecycle marks Devstral Small 2 deprecated",
+            "points": -30
+          }
+        ]
+      },
+      "known_caveats": [
+        "Mistral's lifecycle documentation marks Devstral Small 2 deprecated as of February 10, 2026.",
+        "The exact tag remains recorded for existing installations but is excluded from default recommendations."
+      ],
+      "evidence_date": "2026-10-20",
+      "references": [
+        "https://ollama.com/library/devstral-small-2",
+        "https://ollama.com/library/devstral-small-2/tags",
+        "https://huggingface.co/mistralai/Devstral-Small-2-24B-Instruct-2512",
+        "https://mistral.ai/news/devstral-2-vibe-cli/",
+        "https://github.com/ollama/ollama/releases/tag/v0.40.6"
+      ]
+    },
+    {
+      "id": "qwen3-coder-30b-a3b-q4km",
+      "status": "recommended",
+      "model": {
+        "ollama_name": "qwen3-coder:30b-a3b-q4_K_M",
+        "family": "Qwen3-Coder",
+        "parameter_scale_billion": 30.5,
+        "quantization": "Q4_K_M",
+        "architecture": "qwen3moe"
+      },
+      "source": {
+        "publisher": "Qwen",
+        "model_page": "https://ollama.com/library/qwen3-coder:30b-a3b-q4_K_M",
+        "registry_manifest": "https://registry.ollama.ai/v2/library/qwen3-coder/manifests/30b-a3b-q4_K_M",
+        "expected_model_digest": "sha256:1194192cf2a187eb02722edcc3f77b11d21f537048ce04b67ccf8ba78863006a"
+      },
+      "download": {
+        "minimum_bytes": 18450000000,
+        "maximum_bytes": 18700000000
+      },
+      "context": {
+        "advertised_native_tokens": 262144,
+        "required_tokens": 65536,
+        "verification_method": "both",
+        "extended_context_requirements": [
+          "The manager configures only 65,536 tokens and does not infer memory fit from the larger native limit.",
+          "Runtime /api/ps evidence remains authoritative for the allocated context."
+        ]
+      },
+      "tools": {
+        "advertised": true,
+        "evidence_level": "official_claim",
+        "structured_call_verified": false,
+        "large_tool_set": {
+          "status": "claimed",
+          "tested_definition_count": null
+        },
+        "complex_schema": "claimed",
+        "known_template_caveats": [
+          "The reviewed release has official tool-calling claims but still requires local acceptance.",
+          "Client-side tool limits can reject requests before inference."
+        ],
+        "evidence_references": [
+          "https://ollama.com/library/qwen3-coder",
+          "https://ollama.com/blog/coding-models",
+          "https://huggingface.co/Qwen/Qwen3-Coder-30B-A3B-Instruct"
+        ]
+      },
+      "ollama_compatibility": {
+        "minimum_version": "0.12.0",
+        "maximum_tested_version": "0.40.6"
+      },
+      "license": {
+        "identifier": "Apache-2.0",
+        "name": "Apache License 2.0",
+        "commercial_use": "allowed",
+        "summary": "Upstream distributes the model under Apache-2.0, which generally permits commercial use subject to its terms; this summary is not legal advice.",
+        "source": "https://huggingface.co/Qwen/Qwen3-Coder-30B-A3B-Instruct/blob/main/LICENSE"
+      },
+      "eligibility": {
+        "operating_systems": ["windows", "macos", "linux"],
+        "architectures": ["amd64", "arm64"],
+        "execution_modes": ["cpu_only", "apple_unified", "integrated_shared", "dedicated_gpu"],
+        "disqualifiers": [
+          "unsupported_architecture",
+          "cloud_only",
+          "native_context_below_minimum",
+          "license_incompatible",
+          "tool_capability_failed",
+          "insufficient_disk",
+          "insufficient_memory_headroom",
+          "ollama_version_incompatible",
+          "blocked_status"
+        ]
+      },
+      "host_tiers": [
+        {
+          "execution_mode": "cpu_only",
+          "minimum_system_memory_bytes": 68719476736,
+          "minimum_accelerator_memory_bytes": null,
+          "minimum_free_storage_bytes": 26843545600,
+          "expected_offload": "cpu",
+          "notes": ["CPU fallback is possible only on high-memory hosts and may be slow."]
+        },
+        {
+          "execution_mode": "apple_unified",
+          "minimum_system_memory_bytes": 51539607552,
+          "minimum_accelerator_memory_bytes": null,
+          "minimum_free_storage_bytes": 26843545600,
+          "expected_offload": "full_gpu",
+          "notes": ["Unified memory is evaluated as one pool."]
+        },
+        {
+          "execution_mode": "integrated_shared",
+          "minimum_system_memory_bytes": 68719476736,
+          "minimum_accelerator_memory_bytes": null,
+          "minimum_free_storage_bytes": 26843545600,
+          "expected_offload": "unknown",
+          "notes": ["Integrated-GPU performance is unknown until runtime offload is measured."]
+        },
+        {
+          "execution_mode": "dedicated_gpu",
+          "minimum_system_memory_bytes": 34359738368,
+          "minimum_accelerator_memory_bytes": 17179869184,
+          "minimum_free_storage_bytes": 26843545600,
+          "expected_offload": "partial_gpu",
+          "notes": ["The MoE model activates fewer parameters per token, but all weights still need placement."]
+        }
+      ],
+      "memory_estimate": {
+        "formula_version": 1,
+        "model_weights_bytes": {
+          "minimum_bytes": 18450000000,
+          "maximum_bytes": 18700000000
+        },
+        "kv_cache_bytes_per_token": {
+          "minimum_bytes": 65536,
+          "maximum_bytes": 131072
+        },
+        "runtime_overhead_bytes": {
+          "minimum_bytes": 3221225472,
+          "maximum_bytes": 5368709120
+        },
+        "minimum_os_editor_headroom_bytes": 8589934592
+      },
+      "recommendation": {
+        "agent_reliability_tier": 5,
+        "tool_schema_tier": 4,
+        "cpu_fallback_tier": 3,
+        "score_adjustments": [
+          {
+            "reason": "Strong official coding-agent positioning",
+            "points": 8
+          },
+          {
+            "reason": "Local structured-call acceptance is not yet recorded",
+            "points": -5
+          }
+        ]
+      },
+      "known_caveats": [
+        "Recommended status follows Ollama's current local coding guidance, but this exact tag still lacks recorded physical acceptance.",
+        "MoE active-parameter counts do not reduce storage or weight-placement requirements."
+      ],
+      "evidence_date": "2026-10-20",
+      "references": [
+        "https://ollama.com/library/qwen3-coder",
+        "https://ollama.com/blog/coding-models",
+        "https://huggingface.co/Qwen/Qwen3-Coder-30B-A3B-Instruct",
+        "https://github.com/ollama/ollama/releases/tag/v0.40.6"
+      ]
+    },
+    {
+      "id": "gpt-oss-20b-mxfp4",
+      "status": "fallback",
+      "model": {
+        "ollama_name": "gpt-oss:20b",
+        "family": "gpt-oss",
+        "parameter_scale_billion": 20.9,
+        "quantization": "MXFP4",
+        "architecture": "gptoss"
+      },
+      "source": {
+        "publisher": "OpenAI",
+        "model_page": "https://ollama.com/library/gpt-oss:20b",
+        "registry_manifest": "https://registry.ollama.ai/v2/library/gpt-oss/manifests/20b",
+        "expected_model_digest": "sha256:8ecb5d4ad6172c63f9cbf1a07a04e525985a8a11a6e516da02b674c4010de716"
+      },
+      "download": {
+        "minimum_bytes": 13700000000,
+        "maximum_bytes": 13900000000
+      },
+      "context": {
+        "advertised_native_tokens": 131072,
+        "required_tokens": 65536,
+        "verification_method": "both",
+        "extended_context_requirements": [
+          "The local 20b tag is distinct from 20b-cloud and must remain local in live metadata.",
+          "Runtime /api/ps evidence remains authoritative for the allocated context."
+        ]
+      },
+      "tools": {
+        "advertised": true,
+        "evidence_level": "official_claim",
+        "structured_call_verified": false,
+        "large_tool_set": {
+          "status": "claimed",
+          "tested_definition_count": null
+        },
+        "complex_schema": "claimed",
+        "known_template_caveats": [
+          "Reasoning and tool-call formatting require runtime acceptance through Ollama.",
+          "No web or Python tool is enabled or executed by catalog selection."
+        ],
+        "evidence_references": [
+          "https://ollama.com/library/gpt-oss",
+          "https://ollama.com/blog/gpt-oss",
+          "https://huggingface.co/openai/gpt-oss-20b"
+        ]
+      },
+      "ollama_compatibility": {
+        "minimum_version": "0.11.0",
+        "maximum_tested_version": "0.40.6"
+      },
+      "license": {
+        "identifier": "Apache-2.0",
+        "name": "Apache License 2.0",
+        "commercial_use": "allowed",
+        "summary": "Upstream distributes the model under Apache-2.0, which generally permits commercial use subject to its terms; this summary is not legal advice.",
+        "source": "https://huggingface.co/openai/gpt-oss-20b/blob/main/LICENSE"
+      },
+      "eligibility": {
+        "operating_systems": ["windows", "macos", "linux"],
+        "architectures": ["amd64", "arm64"],
+        "execution_modes": ["cpu_only", "apple_unified", "integrated_shared", "dedicated_gpu"],
+        "disqualifiers": [
+          "unsupported_architecture",
+          "cloud_only",
+          "native_context_below_minimum",
+          "license_incompatible",
+          "tool_capability_failed",
+          "insufficient_disk",
+          "insufficient_memory_headroom",
+          "ollama_version_incompatible",
+          "blocked_status"
+        ]
+      },
+      "host_tiers": [
+        {
+          "execution_mode": "cpu_only",
+          "minimum_system_memory_bytes": 34359738368,
+          "minimum_accelerator_memory_bytes": null,
+          "minimum_free_storage_bytes": 21474836480,
+          "expected_offload": "cpu",
+          "notes": ["This is the preferred CPU-capable fallback among the reviewed agent models."]
+        },
+        {
+          "execution_mode": "apple_unified",
+          "minimum_system_memory_bytes": 34359738368,
+          "minimum_accelerator_memory_bytes": null,
+          "minimum_free_storage_bytes": 21474836480,
+          "expected_offload": "full_gpu",
+          "notes": ["Unified memory is one pool."]
+        },
+        {
+          "execution_mode": "integrated_shared",
+          "minimum_system_memory_bytes": 42949672960,
+          "minimum_accelerator_memory_bytes": null,
+          "minimum_free_storage_bytes": 21474836480,
+          "expected_offload": "unknown",
+          "notes": ["Actual shared-memory offload and responsiveness require runtime verification."]
+        },
+        {
+          "execution_mode": "dedicated_gpu",
+          "minimum_system_memory_bytes": 25769803776,
+          "minimum_accelerator_memory_bytes": 12884901888,
+          "minimum_free_storage_bytes": 21474836480,
+          "expected_offload": "partial_gpu",
+          "notes": ["Twenty-four GiB-class accelerators may permit full offload at 65,536 context; runtime proof is required."]
+        }
+      ],
+      "memory_estimate": {
+        "formula_version": 1,
+        "model_weights_bytes": {
+          "minimum_bytes": 13700000000,
+          "maximum_bytes": 13900000000
+        },
+        "kv_cache_bytes_per_token": {
+          "minimum_bytes": 32768,
+          "maximum_bytes": 65536
+        },
+        "runtime_overhead_bytes": {
+          "minimum_bytes": 2147483648,
+          "maximum_bytes": 4294967296
+        },
+        "minimum_os_editor_headroom_bytes": 8589934592
+      },
+      "recommendation": {
+        "agent_reliability_tier": 4,
+        "tool_schema_tier": 5,
+        "cpu_fallback_tier": 4,
+        "score_adjustments": [
+          {
+            "reason": "Official local agent and coding integrations",
+            "points": 6
+          }
+        ]
+      },
+      "known_caveats": [
+        "The exact local tag must not be replaced with the similarly named cloud tag.",
+        "Runtime verification is required because catalog tool claims are not physical acceptance."
+      ],
+      "evidence_date": "2026-10-20",
+      "references": [
+        "https://ollama.com/library/gpt-oss",
+        "https://ollama.com/blog/gpt-oss",
+        "https://ollama.com/blog/codex",
+        "https://huggingface.co/openai/gpt-oss-20b",
+        "https://github.com/ollama/ollama/releases/tag/v0.40.6"
+      ]
+    },
+    {
+      "id": "mistral-nemo-12b-q4km",
+      "status": "fallback",
+      "model": {
+        "ollama_name": "mistral-nemo:12b-instruct-2407-q4_K_M",
+        "family": "Mistral NeMo",
+        "parameter_scale_billion": 12,
+        "quantization": "Q4_K_M",
+        "architecture": "mistral-nemo"
+      },
+      "source": {
+        "publisher": "Mistral AI and NVIDIA",
+        "model_page": "https://ollama.com/library/mistral-nemo:12b-instruct-2407-q4_K_M",
+        "registry_manifest": "https://registry.ollama.ai/v2/library/mistral-nemo/manifests/12b-instruct-2407-q4_K_M",
+        "expected_model_digest": "sha256:dd3af152229f92a3d61f3f115217c9c72f4b94d8be6778156dab23f894703c28"
+      },
+      "download": {
+        "minimum_bytes": 7400000000,
+        "maximum_bytes": 7550000000
+      },
+      "context": {
+        "advertised_native_tokens": 1024000,
+        "required_tokens": 65536,
+        "verification_method": "both",
+        "extended_context_requirements": [
+          "The manager uses 65,536 tokens and does not promise practical operation at the larger metadata limit.",
+          "Runtime /api/ps evidence remains authoritative for the allocated context."
+        ]
+      },
+      "tools": {
+        "advertised": true,
+        "evidence_level": "maintainer_reproduction",
+        "structured_call_verified": true,
+        "large_tool_set": {
+          "status": "unknown",
+          "tested_definition_count": null
+        },
+        "complex_schema": "unknown",
+        "known_template_caveats": [
+          "A simple structured tool call has been reproduced; large and complex tool sets remain unverified.",
+          "The smaller model is a capacity fallback, not the strongest coding-agent choice."
+        ],
+        "evidence_references": [
+          "https://ollama.com/library/mistral-nemo",
+          "https://docs.ollama.com/capabilities/tool-calling",
+          "https://huggingface.co/mistralai/Mistral-Nemo-Instruct-2407"
+        ]
+      },
+      "ollama_compatibility": {
+        "minimum_version": "0.3.0",
+        "maximum_tested_version": "0.40.6"
+      },
+      "license": {
+        "identifier": "Apache-2.0",
+        "name": "Apache License 2.0",
+        "commercial_use": "allowed",
+        "summary": "Upstream distributes the model under Apache-2.0, which generally permits commercial use subject to its terms; this summary is not legal advice.",
+        "source": "https://huggingface.co/mistralai/Mistral-Nemo-Instruct-2407/blob/main/README.md"
+      },
+      "eligibility": {
+        "operating_systems": ["windows", "macos", "linux"],
+        "architectures": ["amd64", "arm64"],
+        "execution_modes": ["cpu_only", "apple_unified", "integrated_shared", "dedicated_gpu"],
+        "disqualifiers": [
+          "unsupported_architecture",
+          "cloud_only",
+          "native_context_below_minimum",
+          "license_incompatible",
+          "tool_capability_failed",
+          "insufficient_disk",
+          "insufficient_memory_headroom",
+          "ollama_version_incompatible",
+          "blocked_status"
+        ]
+      },
+      "host_tiers": [
+        {
+          "execution_mode": "cpu_only",
+          "minimum_system_memory_bytes": 34359738368,
+          "minimum_accelerator_memory_bytes": null,
+          "minimum_free_storage_bytes": 15032385536,
+          "expected_offload": "cpu",
+          "notes": ["The smallest reviewed fallback is still memory-intensive at 65,536 context."]
+        },
+        {
+          "execution_mode": "apple_unified",
+          "minimum_system_memory_bytes": 34359738368,
+          "minimum_accelerator_memory_bytes": null,
+          "minimum_free_storage_bytes": 15032385536,
+          "expected_offload": "full_gpu",
+          "notes": ["Unified memory is one pool."]
+        },
+        {
+          "execution_mode": "integrated_shared",
+          "minimum_system_memory_bytes": 34359738368,
+          "minimum_accelerator_memory_bytes": null,
+          "minimum_free_storage_bytes": 15032385536,
+          "expected_offload": "unknown",
+          "notes": ["Shared-memory offload is not assumed."]
+        },
+        {
+          "execution_mode": "dedicated_gpu",
+          "minimum_system_memory_bytes": 25769803776,
+          "minimum_accelerator_memory_bytes": 8589934592,
+          "minimum_free_storage_bytes": 15032385536,
+          "expected_offload": "partial_gpu",
+          "notes": ["Known accelerator memory below eight GiB is excluded for this tier."]
+        }
+      ],
+      "memory_estimate": {
+        "formula_version": 1,
+        "model_weights_bytes": {
+          "minimum_bytes": 7400000000,
+          "maximum_bytes": 7550000000
+        },
+        "kv_cache_bytes_per_token": {
+          "minimum_bytes": 65536,
+          "maximum_bytes": 131072
+        },
+        "runtime_overhead_bytes": {
+          "minimum_bytes": 1610612736,
+          "maximum_bytes": 3221225472
+        },
+        "minimum_os_editor_headroom_bytes": 6442450944
+      },
+      "recommendation": {
+        "agent_reliability_tier": 2,
+        "tool_schema_tier": 3,
+        "cpu_fallback_tier": 5,
+        "score_adjustments": [
+          {
+            "reason": "Smallest reviewed transfer and weight footprint",
+            "points": 12
+          }
+        ]
+      },
+      "known_caveats": [
+        "This general instruct model is retained as the smaller capacity fallback.",
+        "Very large native context metadata is not a promise that one-million-token execution is practical."
+      ],
+      "evidence_date": "2026-10-20",
+      "references": [
+        "https://ollama.com/library/mistral-nemo",
+        "https://huggingface.co/mistralai/Mistral-Nemo-Instruct-2407",
+        "https://docs.ollama.com/capabilities/tool-calling",
+        "https://github.com/ollama/ollama/releases/tag/v0.40.6"
+      ]
+    },
+    {
+      "id": "glm-4.7-flash-30b-a3b-q4km",
+      "status": "experimental",
+      "model": {
+        "ollama_name": "glm-4.7-flash:q4_K_M",
+        "family": "GLM-4.7-Flash",
+        "parameter_scale_billion": 29.9,
+        "quantization": "Q4_K_M",
+        "architecture": "glm4moelite"
+      },
+      "source": {
+        "publisher": "Z.ai",
+        "model_page": "https://ollama.com/library/glm-4.7-flash:q4_K_M",
+        "registry_manifest": "https://registry.ollama.ai/v2/library/glm-4.7-flash/manifests/q4_K_M",
+        "expected_model_digest": "sha256:9eba2761cf0b88b8bc11a065a7b5b47f1b13ce820e8e492cb1010b450f9ec950"
+      },
+      "download": {
+        "minimum_bytes": 18900000000,
+        "maximum_bytes": 19200000000
+      },
+      "context": {
+        "advertised_native_tokens": 202752,
+        "required_tokens": 65536,
+        "verification_method": "both",
+        "extended_context_requirements": [
+          "The manager configures only 65,536 tokens and does not infer memory fit from the larger native limit.",
+          "Preserved thinking and framework-specific agent settings are not assumed by catalog selection."
+        ]
+      },
+      "tools": {
+        "advertised": true,
+        "evidence_level": "official_claim",
+        "structured_call_verified": false,
+        "large_tool_set": {
+          "status": "claimed",
+          "tested_definition_count": null
+        },
+        "complex_schema": "claimed",
+        "known_template_caveats": [
+          "Upstream documents a dedicated tool-call parser, but this exact Ollama tag still requires local structured-call acceptance.",
+          "Preserved-thinking behavior is a runtime/client concern and is not guaranteed by the catalog."
+        ],
+        "evidence_references": [
+          "https://ollama.com/library/glm-4.7-flash",
+          "https://huggingface.co/zai-org/GLM-4.7-Flash"
+        ]
+      },
+      "ollama_compatibility": {
+        "minimum_version": "0.15.0",
+        "maximum_tested_version": "0.40.6"
+      },
+      "license": {
+        "identifier": "MIT",
+        "name": "MIT License",
+        "commercial_use": "allowed",
+        "summary": "The exact Ollama tag carries an MIT license, which generally permits commercial use subject to its terms; this summary is not legal advice.",
+        "source": "https://ollama.com/library/glm-4.7-flash:q4_K_M/blobs/b1bca6ec8117"
+      },
+      "eligibility": {
+        "operating_systems": ["windows", "macos", "linux"],
+        "architectures": ["amd64", "arm64"],
+        "execution_modes": ["cpu_only", "apple_unified", "integrated_shared", "dedicated_gpu"],
+        "disqualifiers": [
+          "unsupported_architecture",
+          "cloud_only",
+          "native_context_below_minimum",
+          "license_incompatible",
+          "tool_capability_failed",
+          "insufficient_disk",
+          "insufficient_memory_headroom",
+          "ollama_version_incompatible",
+          "blocked_status"
+        ]
+      },
+      "host_tiers": [
+        {
+          "execution_mode": "cpu_only",
+          "minimum_system_memory_bytes": 68719476736,
+          "minimum_accelerator_memory_bytes": null,
+          "minimum_free_storage_bytes": 26843545600,
+          "expected_offload": "cpu",
+          "notes": ["CPU fallback is possible only on high-memory hosts and may be slow."]
+        },
+        {
+          "execution_mode": "apple_unified",
+          "minimum_system_memory_bytes": 51539607552,
+          "minimum_accelerator_memory_bytes": null,
+          "minimum_free_storage_bytes": 26843545600,
+          "expected_offload": "full_gpu",
+          "notes": ["Unified memory is one pool."]
+        },
+        {
+          "execution_mode": "integrated_shared",
+          "minimum_system_memory_bytes": 68719476736,
+          "minimum_accelerator_memory_bytes": null,
+          "minimum_free_storage_bytes": 26843545600,
+          "expected_offload": "unknown",
+          "notes": ["Integrated-GPU performance and offload are unknown until measured."]
+        },
+        {
+          "execution_mode": "dedicated_gpu",
+          "minimum_system_memory_bytes": 34359738368,
+          "minimum_accelerator_memory_bytes": 17179869184,
+          "minimum_free_storage_bytes": 26843545600,
+          "expected_offload": "partial_gpu",
+          "notes": ["All MoE weights still require placement even though only a subset activates per token."]
+        }
+      ],
+      "memory_estimate": {
+        "formula_version": 1,
+        "model_weights_bytes": {
+          "minimum_bytes": 18900000000,
+          "maximum_bytes": 19200000000
+        },
+        "kv_cache_bytes_per_token": {
+          "minimum_bytes": 65536,
+          "maximum_bytes": 131072
+        },
+        "runtime_overhead_bytes": {
+          "minimum_bytes": 3221225472,
+          "maximum_bytes": 5368709120
+        },
+        "minimum_os_editor_headroom_bytes": 8589934592
+      },
+      "recommendation": {
+        "agent_reliability_tier": 5,
+        "tool_schema_tier": 4,
+        "cpu_fallback_tier": 3,
+        "score_adjustments": [
+          {
+            "reason": "Current Ollama local coding recommendation with strong upstream agent benchmarks",
+            "points": 8
+          },
+          {
+            "reason": "Exact-tag physical acceptance is not yet recorded",
+            "points": -8
+          }
+        ]
+      },
+      "known_caveats": [
+        "Experimental status reflects missing physical acceptance for this exact Ollama tag, not a known failure.",
+        "MoE active-parameter counts do not reduce storage or weight-placement requirements."
+      ],
+      "evidence_date": "2026-10-20",
+      "references": [
+        "https://ollama.com/library/glm-4.7-flash",
+        "https://ollama.com/library/glm-4.7-flash/tags",
+        "https://ollama.com/blog/launch",
+        "https://huggingface.co/zai-org/GLM-4.7-Flash",
+        "https://github.com/ollama/ollama/releases/tag/v0.40.6"
+      ]
+    }
+  ]
+}

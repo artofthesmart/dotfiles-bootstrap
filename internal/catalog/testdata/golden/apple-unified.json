@@ -1,0 +1,550 @@
+{
+  "schema_version": "local-ai.model-selection/v1",
+  "catalog_version": "1.0.0",
+  "primary": {
+    "catalog_id": "gpt-oss-20b-mxfp4",
+    "ollama_name": "gpt-oss:20b",
+    "status": "fallback",
+    "eligible": true,
+    "score": 234,
+    "score_components": [
+      {
+        "name": "agent_reliability",
+        "points": 80,
+        "detail": "catalog tier 4/5"
+      },
+      {
+        "name": "tool_schema",
+        "points": 60,
+        "detail": "catalog tier 5/5"
+      },
+      {
+        "name": "cpu_fallback",
+        "points": 16,
+        "detail": "catalog tier 4/5"
+      },
+      {
+        "name": "catalog_status",
+        "points": 5,
+        "detail": "fallback"
+      },
+      {
+        "name": "download_size",
+        "points": 7,
+        "detail": "maximum reviewed transfer is 13 GiB rounded up"
+      },
+      {
+        "name": "offload_practicality",
+        "points": 30,
+        "detail": "CPU and GPU use one unified-memory pool; no separate VRAM is added."
+      },
+      {
+        "name": "memory_headroom",
+        "points": 20,
+        "detail": "minimum proportional headroom across required known pools"
+      },
+      {
+        "name": "storage_headroom",
+        "points": 10,
+        "detail": "free storage beyond download and retained headroom"
+      },
+      {
+        "name": "catalog_adjustment",
+        "points": 6,
+        "detail": "Official local agent and coding integrations"
+      }
+    ],
+    "memory": {
+      "accounting": "apple_unified_single_pool",
+      "working_set_bytes": 22489934592,
+      "headroom_bytes": 8589934592,
+      "required_system_memory_bytes": 34359738368,
+      "available_system_memory_bytes": 68719476736
+    },
+    "storage": {
+      "download_maximum_bytes": 13900000000,
+      "headroom_bytes": 2780000000,
+      "required_free_bytes": 21474836480,
+      "available_free_bytes": 274877906944
+    },
+    "offload": {
+      "expected": "full_gpu",
+      "practicality": "unified_memory",
+      "detail": "CPU and GPU use one unified-memory pool; no separate VRAM is added."
+    },
+    "disqualifiers": [],
+    "unknowns": []
+  },
+  "fallback": {
+    "catalog_id": "mistral-nemo-12b-q4km",
+    "ollama_name": "mistral-nemo:12b-instruct-2407-q4_K_M",
+    "status": "fallback",
+    "eligible": true,
+    "score": 185,
+    "score_components": [
+      {
+        "name": "agent_reliability",
+        "points": 40,
+        "detail": "catalog tier 2/5"
+      },
+      {
+        "name": "tool_schema",
+        "points": 36,
+        "detail": "catalog tier 3/5"
+      },
+      {
+        "name": "cpu_fallback",
+        "points": 20,
+        "detail": "catalog tier 5/5"
+      },
+      {
+        "name": "catalog_status",
+        "points": 5,
+        "detail": "fallback"
+      },
+      {
+        "name": "download_size",
+        "points": 12,
+        "detail": "maximum reviewed transfer is 8 GiB rounded up"
+      },
+      {
+        "name": "offload_practicality",
+        "points": 30,
+        "detail": "CPU and GPU use one unified-memory pool; no separate VRAM is added."
+      },
+      {
+        "name": "memory_headroom",
+        "points": 20,
+        "detail": "minimum proportional headroom across required known pools"
+      },
+      {
+        "name": "storage_headroom",
+        "points": 10,
+        "detail": "free storage beyond download and retained headroom"
+      },
+      {
+        "name": "catalog_adjustment",
+        "points": 12,
+        "detail": "Smallest reviewed transfer and weight footprint"
+      }
+    ],
+    "memory": {
+      "accounting": "apple_unified_single_pool",
+      "working_set_bytes": 19361160064,
+      "headroom_bytes": 6442450944,
+      "required_system_memory_bytes": 34359738368,
+      "available_system_memory_bytes": 68719476736
+    },
+    "storage": {
+      "download_maximum_bytes": 7550000000,
+      "headroom_bytes": 2147483648,
+      "required_free_bytes": 15032385536,
+      "available_free_bytes": 274877906944
+    },
+    "offload": {
+      "expected": "full_gpu",
+      "practicality": "unified_memory",
+      "detail": "CPU and GPU use one unified-memory pool; no separate VRAM is added."
+    },
+    "disqualifiers": [],
+    "unknowns": []
+  },
+  "candidates": [
+    {
+      "catalog_id": "gpt-oss-20b-mxfp4",
+      "ollama_name": "gpt-oss:20b",
+      "status": "fallback",
+      "eligible": true,
+      "score": 234,
+      "score_components": [
+        {
+          "name": "agent_reliability",
+          "points": 80,
+          "detail": "catalog tier 4/5"
+        },
+        {
+          "name": "tool_schema",
+          "points": 60,
+          "detail": "catalog tier 5/5"
+        },
+        {
+          "name": "cpu_fallback",
+          "points": 16,
+          "detail": "catalog tier 4/5"
+        },
+        {
+          "name": "catalog_status",
+          "points": 5,
+          "detail": "fallback"
+        },
+        {
+          "name": "download_size",
+          "points": 7,
+          "detail": "maximum reviewed transfer is 13 GiB rounded up"
+        },
+        {
+          "name": "offload_practicality",
+          "points": 30,
+          "detail": "CPU and GPU use one unified-memory pool; no separate VRAM is added."
+        },
+        {
+          "name": "memory_headroom",
+          "points": 20,
+          "detail": "minimum proportional headroom across required known pools"
+        },
+        {
+          "name": "storage_headroom",
+          "points": 10,
+          "detail": "free storage beyond download and retained headroom"
+        },
+        {
+          "name": "catalog_adjustment",
+          "points": 6,
+          "detail": "Official local agent and coding integrations"
+        }
+      ],
+      "memory": {
+        "accounting": "apple_unified_single_pool",
+        "working_set_bytes": 22489934592,
+        "headroom_bytes": 8589934592,
+        "required_system_memory_bytes": 34359738368,
+        "available_system_memory_bytes": 68719476736
+      },
+      "storage": {
+        "download_maximum_bytes": 13900000000,
+        "headroom_bytes": 2780000000,
+        "required_free_bytes": 21474836480,
+        "available_free_bytes": 274877906944
+      },
+      "offload": {
+        "expected": "full_gpu",
+        "practicality": "unified_memory",
+        "detail": "CPU and GPU use one unified-memory pool; no separate VRAM is added."
+      },
+      "disqualifiers": [],
+      "unknowns": []
+    },
+    {
+      "catalog_id": "qwen3-coder-30b-a3b-q4km",
+      "ollama_name": "qwen3-coder:30b-a3b-q4_K_M",
+      "status": "recommended",
+      "eligible": true,
+      "score": 231,
+      "score_components": [
+        {
+          "name": "agent_reliability",
+          "points": 100,
+          "detail": "catalog tier 5/5"
+        },
+        {
+          "name": "tool_schema",
+          "points": 48,
+          "detail": "catalog tier 4/5"
+        },
+        {
+          "name": "cpu_fallback",
+          "points": 12,
+          "detail": "catalog tier 3/5"
+        },
+        {
+          "name": "catalog_status",
+          "points": 20,
+          "detail": "recommended"
+        },
+        {
+          "name": "download_size",
+          "points": 2,
+          "detail": "maximum reviewed transfer is 18 GiB rounded up"
+        },
+        {
+          "name": "offload_practicality",
+          "points": 30,
+          "detail": "CPU and GPU use one unified-memory pool; no separate VRAM is added."
+        },
+        {
+          "name": "memory_headroom",
+          "points": 6,
+          "detail": "minimum proportional headroom across required known pools"
+        },
+        {
+          "name": "storage_headroom",
+          "points": 10,
+          "detail": "free storage beyond download and retained headroom"
+        },
+        {
+          "name": "catalog_adjustment",
+          "points": 8,
+          "detail": "Strong official coding-agent positioning"
+        },
+        {
+          "name": "catalog_adjustment",
+          "points": -5,
+          "detail": "Local structured-call acceptance is not yet recorded"
+        }
+      ],
+      "memory": {
+        "accounting": "apple_unified_single_pool",
+        "working_set_bytes": 32658643712,
+        "headroom_bytes": 8589934592,
+        "required_system_memory_bytes": 51539607552,
+        "available_system_memory_bytes": 68719476736
+      },
+      "storage": {
+        "download_maximum_bytes": 18700000000,
+        "headroom_bytes": 3740000000,
+        "required_free_bytes": 26843545600,
+        "available_free_bytes": 274877906944
+      },
+      "offload": {
+        "expected": "full_gpu",
+        "practicality": "unified_memory",
+        "detail": "CPU and GPU use one unified-memory pool; no separate VRAM is added."
+      },
+      "disqualifiers": [],
+      "unknowns": []
+    },
+    {
+      "catalog_id": "mistral-nemo-12b-q4km",
+      "ollama_name": "mistral-nemo:12b-instruct-2407-q4_K_M",
+      "status": "fallback",
+      "eligible": true,
+      "score": 185,
+      "score_components": [
+        {
+          "name": "agent_reliability",
+          "points": 40,
+          "detail": "catalog tier 2/5"
+        },
+        {
+          "name": "tool_schema",
+          "points": 36,
+          "detail": "catalog tier 3/5"
+        },
+        {
+          "name": "cpu_fallback",
+          "points": 20,
+          "detail": "catalog tier 5/5"
+        },
+        {
+          "name": "catalog_status",
+          "points": 5,
+          "detail": "fallback"
+        },
+        {
+          "name": "download_size",
+          "points": 12,
+          "detail": "maximum reviewed transfer is 8 GiB rounded up"
+        },
+        {
+          "name": "offload_practicality",
+          "points": 30,
+          "detail": "CPU and GPU use one unified-memory pool; no separate VRAM is added."
+        },
+        {
+          "name": "memory_headroom",
+          "points": 20,
+          "detail": "minimum proportional headroom across required known pools"
+        },
+        {
+          "name": "storage_headroom",
+          "points": 10,
+          "detail": "free storage beyond download and retained headroom"
+        },
+        {
+          "name": "catalog_adjustment",
+          "points": 12,
+          "detail": "Smallest reviewed transfer and weight footprint"
+        }
+      ],
+      "memory": {
+        "accounting": "apple_unified_single_pool",
+        "working_set_bytes": 19361160064,
+        "headroom_bytes": 6442450944,
+        "required_system_memory_bytes": 34359738368,
+        "available_system_memory_bytes": 68719476736
+      },
+      "storage": {
+        "download_maximum_bytes": 7550000000,
+        "headroom_bytes": 2147483648,
+        "required_free_bytes": 15032385536,
+        "available_free_bytes": 274877906944
+      },
+      "offload": {
+        "expected": "full_gpu",
+        "practicality": "unified_memory",
+        "detail": "CPU and GPU use one unified-memory pool; no separate VRAM is added."
+      },
+      "disqualifiers": [],
+      "unknowns": []
+    },
+    {
+      "catalog_id": "glm-4.7-flash-30b-a3b-q4km",
+      "ollama_name": "glm-4.7-flash:q4_K_M",
+      "status": "experimental",
+      "eligible": false,
+      "score": 198,
+      "score_components": [
+        {
+          "name": "agent_reliability",
+          "points": 100,
+          "detail": "catalog tier 5/5"
+        },
+        {
+          "name": "tool_schema",
+          "points": 48,
+          "detail": "catalog tier 4/5"
+        },
+        {
+          "name": "cpu_fallback",
+          "points": 12,
+          "detail": "catalog tier 3/5"
+        },
+        {
+          "name": "catalog_status",
+          "points": -10,
+          "detail": "experimental"
+        },
+        {
+          "name": "download_size",
+          "points": 2,
+          "detail": "maximum reviewed transfer is 18 GiB rounded up"
+        },
+        {
+          "name": "offload_practicality",
+          "points": 30,
+          "detail": "CPU and GPU use one unified-memory pool; no separate VRAM is added."
+        },
+        {
+          "name": "memory_headroom",
+          "points": 6,
+          "detail": "minimum proportional headroom across required known pools"
+        },
+        {
+          "name": "storage_headroom",
+          "points": 10,
+          "detail": "free storage beyond download and retained headroom"
+        },
+        {
+          "name": "catalog_adjustment",
+          "points": 8,
+          "detail": "Current Ollama local coding recommendation with strong upstream agent benchmarks"
+        },
+        {
+          "name": "catalog_adjustment",
+          "points": -8,
+          "detail": "Exact-tag physical acceptance is not yet recorded"
+        }
+      ],
+      "memory": {
+        "accounting": "apple_unified_single_pool",
+        "working_set_bytes": 33158643712,
+        "headroom_bytes": 8589934592,
+        "required_system_memory_bytes": 51539607552,
+        "available_system_memory_bytes": 68719476736
+      },
+      "storage": {
+        "download_maximum_bytes": 19200000000,
+        "headroom_bytes": 3840000000,
+        "required_free_bytes": 26843545600,
+        "available_free_bytes": 274877906944
+      },
+      "offload": {
+        "expected": "full_gpu",
+        "practicality": "unified_memory",
+        "detail": "CPU and GPU use one unified-memory pool; no separate VRAM is added."
+      },
+      "disqualifiers": [
+        {
+          "code": "experimental_status_excluded",
+          "detail": "Experimental entries require explicit inclusion."
+        }
+      ],
+      "unknowns": []
+    },
+    {
+      "catalog_id": "devstral-small-2-24b-q4km",
+      "ollama_name": "devstral-small-2:24b-instruct-2512-q4_K_M",
+      "status": "deprecated",
+      "eligible": false,
+      "score": 160,
+      "score_components": [
+        {
+          "name": "agent_reliability",
+          "points": 100,
+          "detail": "catalog tier 5/5"
+        },
+        {
+          "name": "tool_schema",
+          "points": 60,
+          "detail": "catalog tier 5/5"
+        },
+        {
+          "name": "cpu_fallback",
+          "points": 8,
+          "detail": "catalog tier 2/5"
+        },
+        {
+          "name": "catalog_status",
+          "points": -35,
+          "detail": "deprecated"
+        },
+        {
+          "name": "download_size",
+          "points": 5,
+          "detail": "maximum reviewed transfer is 15 GiB rounded up"
+        },
+        {
+          "name": "offload_practicality",
+          "points": 30,
+          "detail": "CPU and GPU use one unified-memory pool; no separate VRAM is added."
+        },
+        {
+          "name": "memory_headroom",
+          "points": 12,
+          "detail": "minimum proportional headroom across required known pools"
+        },
+        {
+          "name": "storage_headroom",
+          "points": 10,
+          "detail": "free storage beyond download and retained headroom"
+        },
+        {
+          "name": "catalog_adjustment",
+          "points": -30,
+          "detail": "Upstream lifecycle marks Devstral Small 2 deprecated"
+        }
+      ],
+      "memory": {
+        "accounting": "apple_unified_single_pool",
+        "working_set_bytes": 30282385536,
+        "headroom_bytes": 8589934592,
+        "required_system_memory_bytes": 42949672960,
+        "available_system_memory_bytes": 68719476736
+      },
+      "storage": {
+        "download_maximum_bytes": 15250000000,
+        "headroom_bytes": 3050000000,
+        "required_free_bytes": 25769803776,
+        "available_free_bytes": 274877906944
+      },
+      "offload": {
+        "expected": "full_gpu",
+        "practicality": "unified_memory",
+        "detail": "CPU and GPU use one unified-memory pool; no separate VRAM is added."
+      },
+      "disqualifiers": [
+        {
+          "code": "deprecated_status_excluded",
+          "detail": "Deprecated entries are excluded by default."
+        }
+      ],
+      "unknowns": []
+    }
+  ],
+  "notices": [
+    {
+      "code": "runtime_verification_required",
+      "detail": "Catalog eligibility is planning evidence only; exact registry metadata, local metadata, a structured tool call, allocated context, and actual offload must be verified at runtime."
+    }
+  ]
+}

@@ -19,6 +19,8 @@ Machine-readable contracts:
 - [Configuration v1](../../schemas/local-ai-manager/config-v1.schema.json)
 - [Model catalog v1](../../schemas/local-ai-manager/model-catalog-v1.schema.json)
 
+The release-embedded reviewed data is in [`catalog/models.json`](../../catalog/models.json). `internal/catalog` performs strict schema-shaped and domain validation, deterministic eligibility/scoring, separate-pool memory accounting, and primary/smaller-fallback selection. Run `make catalog-drift` for a read-only exact-tag registry report; it never rewrites the catalog. Registry and runtime verification remain authoritative.
+
 ## Versioning policy
 
 The contract version and each schema discriminator are independent of the application version.
