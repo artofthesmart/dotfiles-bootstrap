@@ -14,8 +14,21 @@ function Confirm-Step([string]$Message) {
     return (Read-Choice "$Message [y/N]") -match '^(y|yes)$'
 }
 function Invoke-Native([string]$File, [string[]]$Arguments) {
-    & $File @Arguments | Out-Host
-    if ($LASTEXITCODE -ne 0) { throw "$File failed (exit $LASTEXITCODE). Resolve the error and rerun." }
+    $previousPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $output = @(& $File @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
+    foreach ($line in $output) { Write-Host ([string]$line) }
+    if ($exitCode -ne 0) {
+        $command = (@($File) + $Arguments) -join ' '
+        $detail = @($output | ForEach-Object { [string]$_ }) -join "`n"
+        if ($detail) { throw "Command failed (exit $exitCode): $command`n$detail" }
+        throw "Command failed (exit $exitCode): $command. Resolve the error and rerun."
+    }
 }
 function Get-Application([string]$Name, [string[]]$Candidates) {
     $command = Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue
@@ -691,12 +704,12 @@ function Connect-Code {
     } else {
         Write-Warning 'Local tool use is UNVERIFIED. Test an approved edit in VS Code; choose another model if Agent tools fail.'
     }
-    if (-not (Confirm-Step 'Create/reuse Local AI and install official GitHub.copilot-chat and Ollama.ollama extensions only for that profile')) { throw 'Profile setup cancelled.' }
-    Invoke-Native $script:Code @('--profile', 'Local AI', '--install-extension', 'GitHub.copilot-chat')
+    Write-Host 'GitHub Copilot Chat is bundled with this supported VS Code version; no marketplace install is needed.'
+    if (-not (Confirm-Step 'Create/reuse Local AI and install the official Ollama.ollama extension only for that profile')) { throw 'Profile setup cancelled.' }
     Invoke-Native $script:Code @('--profile', 'Local AI', '--install-extension', 'Ollama.ollama')
     $extensions = @(& $script:Code --profile 'Local AI' --list-extensions)
-    if ($LASTEXITCODE -ne 0 -or $extensions -notcontains 'GitHub.copilot-chat' -or $extensions -notcontains 'Ollama.ollama') {
-        throw 'Required profile extensions were not installed.'
+    if ($LASTEXITCODE -ne 0 -or $extensions -notcontains 'Ollama.ollama') {
+        throw 'The Ollama extension was not installed in the Local AI profile.'
     }
     $repo = Read-Choice 'Full path to an existing locally checked-out repository'
     if (-not [IO.Path]::IsPathRooted($repo) -or -not (Test-Path -LiteralPath $repo -PathType Container)) { throw 'Choose an existing absolute directory.' }
@@ -708,7 +721,7 @@ function Connect-Code {
 
 Finish in the Local AI window (these UI steps are not automated):
 1. Trust the workspace only if you trust this repository.
-2. Open Chat, select Agent mode, then $script:LocalModel under Ollama.
+2. Open the built-in Copilot Chat, select Agent mode, then $script:LocalModel under Ollama.
    Do NOT select Auto or a cloud model. If missing, use the Command Palette:
    Ollama: Refresh Models, or Ollama: Diagnose Models.
 3. In this profile's Settings, enable chat.agentHost.byokModels.enabled if

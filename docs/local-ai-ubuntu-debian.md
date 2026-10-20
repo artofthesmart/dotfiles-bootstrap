@@ -41,8 +41,9 @@ bash ./scripts/setup-local-ai.sh
    It creates a `local-ai-...` context-budget model and checks a harmless
    structured tool call. Compatible manually downloaded GGUF files have a
    guided import alternative. Start Ollama when prompted if needed.
-4. **Use your checkout.** Official Chat/Ollama extensions are installed into a
-   separate **Local AI** profile. Follow the final UI steps: choose **Agent**,
+4. **Use your checkout.** Copilot Chat is bundled with supported VS Code. The
+   official Ollama extension is installed into a separate **Local AI** profile.
+   Follow the final UI steps: choose **Agent**,
    explicitly select the local Ollama model, and set utility models to local
    choices. Approve tools individually; try a small documentation edit and an
    existing test, then inspect the diff.

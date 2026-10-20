@@ -39,8 +39,9 @@ bash ./scripts/setup-local-ai.sh
    checks free disk and shows a final review. Installed models are reused without updating;
    new downloads also appear in Ollama. The wizard then checks advertised tools
    and a harmless structured tool call. CPU-only performance may still be poor.
-4. **Use the Local AI profile.** The wizard installs official Chat/Ollama
-   extensions there, preserving your original profile, and opens your checkout.
+4. **Use the Local AI profile.** Copilot Chat is bundled with supported VS Code.
+   The wizard installs the official Ollama extension there, preserves your
+   original profile, and opens your checkout.
    Follow the final UI instructions: choose **Agent**, explicitly select your
    `local-ai-...` Ollama model, and choose local utility models in Settings.
    Review and approve tools individually. Start with a small documentation

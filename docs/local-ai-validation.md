@@ -46,7 +46,9 @@ Coverage includes model input validation, cancellation, GGUF validation,
 exact-tag registry preflight, pre-download context rejection, installed-model
 reuse, context-budget aliases, storage limits, explicit download/HTTP/tool
 failures, cloud metadata rejection, hardware field allowlisting and profile-scoped
-commands. Bash also covers translated Macs, Intel warnings, unsupported
+commands. It also verifies that the wizard does not try to reinstall bundled
+Copilot Chat and installs only the Ollama extension into Local AI. Bash covers
+translated Macs, Intel warnings, unsupported
 OS/architecture, old VS Code, failed elevation, existing apps outside PATH,
 repeated runs and preservation of default settings.
 
@@ -171,6 +173,11 @@ For each platform, exercise these steps:
   context, then rerun. Do not reduce context below the minimum.
   `ollama ps` displays actual CPU/GPU offload after the check; an installed
   driver alone is not evidence of GPU inference. Intel Mac Ollama is CPU-only.
+- **VS Code profile setup:** VS Code 1.127+ bundles `GitHub.copilot-chat` and
+  enables its built-in extension with automatic updates. Do not pass that ID to
+  `--install-extension`; current VS Code can return exit 1 for a built-in
+  extension. The wizard installs only `Ollama.ollama` into Local AI. Native
+  command failures now include the command's captured output for diagnosis.
 - **Missing model in VS Code:** verify Ollama is responding at
   `http://127.0.0.1:11434`, run **Ollama: Refresh Models**, then
   **Ollama: Diagnose Models**. Verify VS Code 1.127+ and extension versions.

@@ -464,6 +464,7 @@ class WizardTests(unittest.TestCase):
         self.assertEqual(settings.read_text(), '{"keep": "unchanged"}')
         for row in self.calls("code"):
             self.assertEqual(row[row.index("--profile") + 1], "Local AI")
+        self.assertFalse(any("GitHub.copilot-chat" in row for row in self.calls("code")))
         self.assertIn(str(self.repo), self.calls("code")[-1])
 
     def test_full_interactive_flow_with_fake_api(self):

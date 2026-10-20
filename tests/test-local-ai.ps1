@@ -335,7 +335,7 @@ try {
     }
     Test-Case 'Profile scope is explicit for every code CLI operation' {
         $source = [IO.File]::ReadAllText($scriptPath)
-        Assert-True ($source -match "'--profile', 'Local AI', '--install-extension', 'GitHub.copilot-chat'") 'Chat extension not profile-scoped'
+        Assert-True ($source -notmatch "'--install-extension', 'GitHub.copilot-chat'") 'Tried to install bundled Copilot Chat from the marketplace'
         Assert-True ($source -match "'--profile', 'Local AI', '--install-extension', 'Ollama.ollama'") 'Ollama extension not profile-scoped'
         Assert-True ($source -match "'--new-window', '--profile', 'Local AI', \`$repo") 'Repository launch not profile-scoped'
         Assert-True ($source -notmatch 'Invoke-Expression|Set-ExecutionPolicy|AdapterRAM\s*=') 'Unexpected unsafe/global behavior'
@@ -381,7 +381,7 @@ $global:LASTEXITCODE = 0
         }
         Assert-True ([IO.File]::ReadAllText($defaultSettings) -eq '{"keep":"unchanged"}') 'Existing settings changed'
         $codeCalls = @($script:Calls | Where-Object { $_.File -eq $cli })
-        Assert-True ($codeCalls.Count -eq 6) 'Missing extension/launch calls'
+        Assert-True ($codeCalls.Count -eq 4) 'Missing extension/launch calls'
         foreach ($call in $codeCalls) {
             Assert-True ($call.Arguments -contains '--profile' -and $call.Arguments -contains 'Local AI') 'Unscoped profile operation'
         }

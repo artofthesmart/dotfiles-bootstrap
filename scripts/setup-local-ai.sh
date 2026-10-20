@@ -502,13 +502,13 @@ check_model() {
     printf 'CPU-only offload can be slow even if a GPU is installed. No GPU drivers were changed.\n'
 }
 connect_code() {
-    printf '\nInstalling official chat and Ollama extensions only for the Local AI profile.\n'
-    confirm "Create/reuse Local AI and install GitHub.copilot-chat and Ollama.ollama" || fail "Profile setup cancelled."
-    "$CODE" --profile "Local AI" --install-extension GitHub.copilot-chat
+    printf '\nGitHub Copilot Chat is bundled with this supported VS Code version.\n'
+    printf 'Installing the official Ollama extension only for the Local AI profile.\n'
+    confirm "Create/reuse Local AI and install Ollama.ollama" || fail "Profile setup cancelled."
     "$CODE" --profile "Local AI" --install-extension Ollama.ollama
     "$CODE" --profile "Local AI" --list-extensions > "$WORK/extensions.txt"
-    grep -qi '^GitHub.copilot-chat$' "$WORK/extensions.txt" &&
-        grep -qi '^Ollama.ollama$' "$WORK/extensions.txt" || fail "Required profile extensions were not installed."
+    grep -qi '^Ollama.ollama$' "$WORK/extensions.txt" ||
+        fail "The Ollama extension was not installed in the Local AI profile."
     local repo
     ask "Full path to an existing locally checked-out repository"
     repo=$ANSWER
@@ -520,7 +520,7 @@ connect_code() {
 
 Finish in the Local AI window (these UI steps are not automated):
 1. Trust the workspace only if you trust this repository.
-2. Open Chat, select Agent mode, then select $LOCAL_MODEL under Ollama.
+2. Open the built-in Copilot Chat, select Agent mode, then select $LOCAL_MODEL under Ollama.
    Do NOT select Auto or a cloud model. If missing, run "Ollama: Refresh Models"
    or "Ollama: Diagnose Models" from the Command Palette.
 3. In this profile's Settings, enable chat.agentHost.byokModels.enabled if
