@@ -41,6 +41,7 @@ var validIssueCodes = stringSet(
 	"LAI-MODEL-001", "LAI-MODEL-002", "LAI-MODEL-003", "LAI-MODEL-004", "LAI-MODEL-005", "LAI-MODEL-006",
 	"LAI-RUNTIME-001", "LAI-RUNTIME-002", "LAI-RUNTIME-003", "LAI-RUNTIME-004", "LAI-RUNTIME-005",
 	"LAI-VSCODE-001", "LAI-VSCODE-002", "LAI-VSCODE-003", "LAI-VSCODE-004", "LAI-VSCODE-005", "LAI-VSCODE-006",
+	"LAI-COPILOT-001", "LAI-COPILOT-002", "LAI-COPILOT-003", "LAI-COPILOT-004", "LAI-COPILOT-005", "LAI-COPILOT-006",
 	"LAI-STATE-001", "LAI-STATE-002", "LAI-STATE-003", "LAI-STATE-004",
 	"LAI-CONFIG-001", "LAI-CONFIG-002",
 	"LAI-ASSET-001", "LAI-ASSET-002",
@@ -455,7 +456,7 @@ func (i Issue) validate() error {
 		return invalid("issue.severity", string(i.Severity))
 	}
 	switch i.Domain {
-	case "host", "prerequisite", "policy", "network", "integrity", "capacity", "model", "runtime", "vscode", "state", "config", "asset", "update", "internal":
+	case "host", "prerequisite", "policy", "network", "integrity", "capacity", "model", "runtime", "vscode", "copilot", "state", "config", "asset", "update", "internal":
 	default:
 		return invalid("issue.domain", string(i.Domain))
 	}
@@ -681,7 +682,7 @@ func validStepStatus(value StepStatus) bool {
 
 func validOwner(value Owner) bool {
 	switch value {
-	case OwnerApp, OwnerState, OwnerPlatform, OwnerHardware, OwnerCatalog, OwnerOllama, OwnerVSCode, OwnerInstall, OwnerUpdate:
+	case OwnerApp, OwnerState, OwnerPlatform, OwnerHardware, OwnerCatalog, OwnerOllama, OwnerVSCode, OwnerCopilot, OwnerInstall, OwnerUpdate:
 		return true
 	default:
 		return false
@@ -708,7 +709,7 @@ func validEvidenceKind(value EvidenceKind) bool {
 
 func validAssetType(value AssetType) bool {
 	switch value {
-	case AssetManagerBinary, AssetManagerDirectory, AssetPathEntry, AssetDownloadCache, AssetRollbackBinary, AssetVSCodeApplication, AssetOllamaApplication, AssetOllamaService, AssetVSCodeProfile, AssetVSCodeExtension, AssetOllamaSourceModel, AssetOllamaAlias, AssetStateFile, AssetBackupFile:
+	case AssetManagerBinary, AssetManagerDirectory, AssetPathEntry, AssetDownloadCache, AssetRollbackBinary, AssetVSCodeApplication, AssetOllamaApplication, AssetOllamaService, AssetVSCodeProfile, AssetVSCodeExtension, AssetOllamaSourceModel, AssetOllamaAlias, AssetCopilotApplication, AssetCopilotLauncher, AssetStateFile, AssetBackupFile:
 		return true
 	default:
 		return false

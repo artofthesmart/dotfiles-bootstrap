@@ -17,17 +17,24 @@ import (
 const MaxExtractedBinary = int64(128 << 20)
 
 func ExtractExecutable(archiveData []byte, assetName, executableName string) ([]byte, error) {
+	return ExtractExecutableWithLimit(archiveData, assetName, executableName, MaxExtractedBinary)
+}
+
+func ExtractExecutableWithLimit(archiveData []byte, assetName, executableName string, limit int64) ([]byte, error) {
+	if limit <= 0 {
+		limit = MaxExtractedBinary
+	}
 	switch {
 	case strings.HasSuffix(assetName, ".zip"):
-		return extractZip(archiveData, executableName)
+		return extractZip(archiveData, executableName, limit)
 	case strings.HasSuffix(assetName, ".tar.gz"):
-		return extractTarGZ(archiveData, executableName)
+		return extractTarGZ(archiveData, executableName, limit)
 	default:
 		return nil, typed(app.IssueDownloadInvalid, errors.New("unsupported release archive format"))
 	}
 }
 
-func extractZip(data []byte, executableName string) ([]byte, error) {
+func extractZip(data []byte, executableName string, limit int64) ([]byte, error) {
 	reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return nil, typed(app.IssueDownloadInvalid, fmt.Errorf("open zip: %w", err))
@@ -54,7 +61,7 @@ func extractZip(data []byte, executableName string) ([]byte, error) {
 		if err != nil {
 			return nil, typed(app.IssueDownloadInvalid, err)
 		}
-		result, err = readBounded(stream, MaxExtractedBinary)
+		result, err = readBounded(stream, limit)
 		closeErr := stream.Close()
 		if err != nil {
 			return nil, typed(app.IssueDownloadInvalid, err)
@@ -69,7 +76,7 @@ func extractZip(data []byte, executableName string) ([]byte, error) {
 	return result, nil
 }
 
-func extractTarGZ(data []byte, executableName string) ([]byte, error) {
+func extractTarGZ(data []byte, executableName string, limit int64) ([]byte, error) {
 	compressed, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return nil, typed(app.IssueDownloadInvalid, fmt.Errorf("open gzip: %w", err))
@@ -101,10 +108,10 @@ func extractTarGZ(data []byte, executableName string) ([]byte, error) {
 		if result != nil {
 			return nil, typed(app.IssueDownloadInvalid, errors.New("archive contains duplicate manager executables"))
 		}
-		if header.Size < 0 || header.Size > MaxExtractedBinary {
+		if header.Size < 0 || header.Size > limit {
 			return nil, typed(app.IssueDownloadInvalid, errors.New("manager executable exceeds extraction bound"))
 		}
-		result, err = readBounded(reader, MaxExtractedBinary)
+		result, err = readBounded(reader, limit)
 		if err != nil {
 			return nil, typed(app.IssueDownloadInvalid, err)
 		}

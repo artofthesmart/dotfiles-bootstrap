@@ -135,6 +135,15 @@ func standardExecutablePaths() map[string][]string {
 			"${LOCALAPPDATA}/Programs/Ollama/ollama.exe",
 			"${HOME}/.local/bin/ollama",
 		},
+		"copilot": {
+			"${HOME}/.local/bin/copilot",
+			"/usr/local/bin/copilot",
+			"/usr/bin/copilot",
+			"/opt/homebrew/bin/copilot",
+			"/home/linuxbrew/.linuxbrew/bin/copilot",
+			"${LOCALAPPDATA}/Programs/LocalAI/copilot.exe",
+			"${LOCALAPPDATA}/Microsoft/WinGet/Links/copilot.exe",
+		},
 	}
 }
 

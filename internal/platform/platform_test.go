@@ -149,6 +149,27 @@ func TestApplicationLocatorFindsExecutableInPathWithSpaces(t *testing.T) {
 	}
 }
 
+func TestApplicationLocatorFindsCopilotInOfficialUserLocalLocation(t *testing.T) {
+	filesystem := testkit.NewMemoryFileSystem("/manager", nil)
+	target := "/manager/home/.local/bin/copilot"
+	if err := filesystem.MkdirAll("/manager/home/.local/bin", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := filesystem.WriteFile(target, []byte("official copilot"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	locator := platform.NewStandardApplicationLocator(filesystem)
+	locator.Environment = platform.NewEnvironmentBuilderFrom([]string{"HOME=/manager/home", "PATH=/manager/empty"})
+	locator.OS = "linux"
+	application, err := locator.FindExecutable("copilot")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if application.Executable != target || application.Source != "standard_location" {
+		t.Fatalf("application = %#v", application)
+	}
+}
+
 func TestCommandRunnerUsesExactArgumentsBoundsOutputAndReturnsExitCode(t *testing.T) {
 	runner := platform.CommandRunner{
 		Environment: platform.NewEnvironmentBuilderFrom(nil),

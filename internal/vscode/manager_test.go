@@ -181,6 +181,47 @@ func TestOldVSCodeIsVersionGatedFromOfficialEvidence(t *testing.T) {
 			t.Fatalf("old VS Code must not be mutated: %#v", call)
 		}
 	}
+	if result.Status.CopilotChatBundled || result.Status.CopilotChatAvailable {
+		t.Fatalf("unsupported non-bundled VS Code was reported as Copilot Chat capable: %+v", result.Status)
+	}
+}
+
+func TestSupportedVSCodeVerifiesBundledCopilotChatWithoutMarketplaceInstall(t *testing.T) {
+	runner := testkit.NewScriptedRunner(
+		success("1.127.0\ncommit\nx64\n"),
+		success("Ollama.ollama@0.0.13\n"),
+		success(""),
+	)
+	manager := newTestManager(runner, pathLocator("/usr/bin/code"), nil, &immediateClock{now: time.Now().UTC()})
+	result := manager.Configure(context.Background(), Request{Alias: "local-ai-model:latest"})
+	if !result.Status.CopilotChatBundled || !result.Status.CopilotChatAvailable ||
+		result.Status.CopilotChatSource != "bundled" {
+		t.Fatalf("bundled Copilot Chat capability was not verified: %+v", result.Status)
+	}
+	for _, call := range runner.Calls() {
+		if containsArg(call.Args, BundledCopilotChatExtensionID) {
+			t.Fatalf("bundled Copilot Chat was marketplace-installed: %#v", call)
+		}
+	}
+}
+
+func TestAlreadyPresentCopilotChatExtensionDoesNotCauseFalseFailureOrReinstall(t *testing.T) {
+	runner := testkit.NewScriptedRunner(
+		success("1.128.0\ncommit\nx64\n"),
+		success("GitHub.copilot-chat@1.400.0\nOllama.ollama@0.0.13\n"),
+		success(""),
+	)
+	manager := newTestManager(runner, pathLocator("/usr/bin/code"), nil, &immediateClock{now: time.Now().UTC()})
+	result := manager.Configure(context.Background(), Request{Alias: "local-ai-model:latest"})
+	if result.ExitCode != app.ExitManualRequired || !result.Status.CopilotChatExtensionSeen ||
+		!result.Status.CopilotChatAvailable {
+		t.Fatalf("already-present Copilot Chat caused a false failure: %+v", result)
+	}
+	for _, call := range runner.Calls() {
+		if containsArg(call.Args, BundledCopilotChatExtensionID) {
+			t.Fatalf("already-present Copilot Chat was reinstalled: %#v", call)
+		}
+	}
 }
 
 func TestRerunReusesProfileAndDoesNotReinstallOrTouchSettings(t *testing.T) {

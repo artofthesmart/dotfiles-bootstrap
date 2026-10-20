@@ -294,7 +294,7 @@ func (uninstaller Uninstaller) Uninstall(ctx context.Context, assets []state.Man
 
 func defaultRemoval(assetType state.AssetType) bool {
 	switch assetType {
-	case state.AssetManagerBinary, state.AssetManagerDirectory, state.AssetDownloadCache, state.AssetRollbackBinary, state.AssetStateFile, state.AssetPathEntry:
+	case state.AssetManagerBinary, state.AssetManagerDirectory, state.AssetDownloadCache, state.AssetRollbackBinary, state.AssetStateFile, state.AssetPathEntry, state.AssetCopilotApplication, state.AssetCopilotLauncher:
 		return true
 	default:
 		return false

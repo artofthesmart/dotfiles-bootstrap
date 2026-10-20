@@ -20,6 +20,7 @@ const (
 	MinimumVSCodeVersion            = "1.127.0"
 	MinimumOllamaExtensionVersion   = "0.0.13"
 	OfficialRequirementEvidenceURL  = "https://github.com/ollama/ollama-vscode/blob/4b4d8c345a8929db4541e2a23f26fe07b0a5bca1/package.json"
+	OfficialCopilotCapabilityURL    = "https://code.visualstudio.com/docs/agent-customization/language-models"
 	OfficialRequirementEvidenceDate = "2026-10-20"
 )
 
@@ -115,7 +116,11 @@ type Status struct {
 	OllamaExtensionVersion   string
 	OllamaExtensionCurrent   bool
 	CopilotChatBundled       bool
+	CopilotChatAvailable     bool
+	CopilotChatExtensionSeen bool
+	CopilotChatSource        string
 	RequirementEvidenceURL   string
+	CopilotCapabilityURL     string
 	RequirementEvidenceDate  string
 	Diagnostics              []Diagnostic
 	Issues                   []app.Issue
@@ -316,6 +321,7 @@ func (m *Manager) inspect(ctx context.Context) (Status, error) {
 		ProfileName:             ProfileName,
 		RequiredVSCodeVersion:   MinimumVSCodeVersion,
 		RequirementEvidenceURL:  OfficialRequirementEvidenceURL,
+		CopilotCapabilityURL:    OfficialCopilotCapabilityURL,
 		RequirementEvidenceDate: OfficialRequirementEvidenceDate,
 	}
 	if m.platform.Applications == nil || m.platform.Runner == nil {
@@ -343,6 +349,10 @@ func (m *Manager) inspect(ctx context.Context) (Status, error) {
 	status.Version = version.Raw
 	status.VersionSupported = version.AtLeast(mustVersion(MinimumVSCodeVersion))
 	status.CopilotChatBundled = status.VersionSupported
+	if status.CopilotChatBundled {
+		status.CopilotChatAvailable = true
+		status.CopilotChatSource = "bundled"
+	}
 	if !status.VersionSupported {
 		return status, ErrVSCodeTooOld
 	}
@@ -359,6 +369,13 @@ func (m *Manager) inspect(ctx context.Context) (Status, error) {
 			status.OllamaExtensionVersion = extension.Version
 			installed, parseErr := ParseVersion(extension.Version)
 			status.OllamaExtensionCurrent = parseErr == nil && installed.AtLeast(mustVersion(MinimumOllamaExtensionVersion))
+		}
+		if strings.EqualFold(extension.ID, BundledCopilotChatExtensionID) {
+			status.CopilotChatExtensionSeen = true
+			status.CopilotChatAvailable = true
+			if !status.CopilotChatBundled {
+				status.CopilotChatSource = "official_extension"
+			}
 		}
 	}
 	return status, nil
@@ -523,6 +540,9 @@ func healthIssues(status Status) []app.Issue {
 	}
 	if !status.ProfileReady {
 		add(app.IssueVSCodeIntegration, "The Local AI profile is not ready.")
+	}
+	if !status.CopilotChatAvailable {
+		add(app.IssueVSCodeIntegration, "The supported Copilot Chat capability is unavailable in the Local AI profile.")
 	}
 	if !status.OllamaExtensionInstalled {
 		add(app.IssueVSCodeExtension, "The official Ollama.ollama extension is not installed in the Local AI profile.")

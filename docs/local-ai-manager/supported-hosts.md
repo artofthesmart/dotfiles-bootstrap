@@ -44,6 +44,7 @@ No row may be advertised as stable-release verified until its physical acceptanc
 | Arbitrary Hugging Face discovery/download/import | Out | Out | Out |
 | Validate local-only metadata, tools, 65K allocation, and offload | Supported | Supported | Supported |
 | Create/reuse Local AI profile and install `Ollama.ollama` | Supported | Supported | Supported |
+| Install/reuse official Copilot CLI and create `copilot-local` | Supported on x86-64 | Supported | Supported |
 | Select the sparkle-picker model, workspace trust, Configure Tools, and approvals | Manual | Manual | Manual |
 | Edit undocumented VS Code profile storage | Out | Out | Out |
 | User-local manager install, PATH marker, update, rollback | Supported | Supported | Supported |
@@ -52,5 +53,4 @@ No row may be advertised as stable-release verified until its physical acceptanc
 
 ## Universal exclusions
 
-The manager does not clone repositories, approve workspace trust or agent tools, change organization policy, disable telemetry or security controls, manage firewalls, choose cloud fallback, install GPU drivers, alter firmware, or claim offline/privacy guarantees beyond its explicit local operations and data exclusions.
-
+The manager does not clone repositories, approve workspace trust or agent tools, change organization policy, change global telemetry settings or security controls, manage firewalls, choose cloud fallback, install GPU drivers, alter firmware, or claim offline/privacy guarantees beyond its explicit local operations and data exclusions. The manager-owned `copilot-local` process uses the official CLI's documented `--disable-client-telemetry` flag.

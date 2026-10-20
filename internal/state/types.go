@@ -82,6 +82,7 @@ const (
 	OwnerCatalog  Owner = "catalog"
 	OwnerOllama   Owner = "ollama"
 	OwnerVSCode   Owner = "vscode"
+	OwnerCopilot  Owner = "copilot"
 	OwnerInstall  Owner = "install"
 	OwnerUpdate   Owner = "update"
 )
@@ -149,20 +150,22 @@ const (
 type AssetType string
 
 const (
-	AssetManagerBinary     AssetType = "manager_binary"
-	AssetManagerDirectory  AssetType = "manager_directory"
-	AssetPathEntry         AssetType = "path_entry"
-	AssetDownloadCache     AssetType = "download_cache"
-	AssetRollbackBinary    AssetType = "rollback_binary"
-	AssetVSCodeApplication AssetType = "vscode_application"
-	AssetOllamaApplication AssetType = "ollama_application"
-	AssetOllamaService     AssetType = "ollama_service"
-	AssetVSCodeProfile     AssetType = "vscode_profile"
-	AssetVSCodeExtension   AssetType = "vscode_extension"
-	AssetOllamaSourceModel AssetType = "ollama_source_model"
-	AssetOllamaAlias       AssetType = "ollama_alias"
-	AssetStateFile         AssetType = "state_file"
-	AssetBackupFile        AssetType = "backup_file"
+	AssetManagerBinary      AssetType = "manager_binary"
+	AssetManagerDirectory   AssetType = "manager_directory"
+	AssetPathEntry          AssetType = "path_entry"
+	AssetDownloadCache      AssetType = "download_cache"
+	AssetRollbackBinary     AssetType = "rollback_binary"
+	AssetVSCodeApplication  AssetType = "vscode_application"
+	AssetOllamaApplication  AssetType = "ollama_application"
+	AssetOllamaService      AssetType = "ollama_service"
+	AssetVSCodeProfile      AssetType = "vscode_profile"
+	AssetVSCodeExtension    AssetType = "vscode_extension"
+	AssetOllamaSourceModel  AssetType = "ollama_source_model"
+	AssetOllamaAlias        AssetType = "ollama_alias"
+	AssetCopilotApplication AssetType = "copilot_application"
+	AssetCopilotLauncher    AssetType = "copilot_launcher"
+	AssetStateFile          AssetType = "state_file"
+	AssetBackupFile         AssetType = "backup_file"
 )
 
 type LocatorKind string

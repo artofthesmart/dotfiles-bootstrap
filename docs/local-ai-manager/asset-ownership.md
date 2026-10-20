@@ -43,9 +43,11 @@ An apply receipt must exist before an asset can be marked manager-owned. Failed 
 | `Ollama.ollama` extension in Local AI | `manager_owned` only when manager installed it | `external_detected` | Remove only with `--remove-vscode-extension`; preserve other profile data |
 | Catalog source model pulled by manager | `manager_owned` only if absent before the pull and verified afterward | `user_owned`/`external_detected` when pre-existing | Retain by default; `--remove-models` plus confirmation and dependency review |
 | Generated `local-ai-...` alias | `manager_owned` when created and verified by manager | Existing alias is `user_owned` until adopted or replaced with consent | Retain by default; `--remove-aliases` plus confirmation |
+| Official GitHub Copilot CLI executable | `manager_owned` only when downloaded from the official `github/copilot-cli` stable release and verified by API digest plus `SHA256SUMS.txt` | `external_detected` when a supported existing official executable is reused | Remove only the manager-installed executable |
+| `copilot-local` launcher | `manager_owned` when atomically created and verified by the manager | Existing unrecorded launchers are retained and block replacement until ownership is resolved | Remove with manager; restore the verified previous launcher during rollback |
 | User-imported GGUF or source file | Never manager-owned in v1 | `user_owned` | Retain |
 | Generated support report | `user_owned` at chosen destination | Not tracked after creation | Retain |
-| OS security, firewall, telemetry, driver, workspace trust, and tool approval settings | Never managed | Not inventoried as assets | Never change or remove |
+| OS security, firewall, global telemetry, driver, workspace trust, and tool approval settings | Never managed | Not inventoried as assets | Never change or remove; the launcher-only Copilot CLI telemetry opt-out is not a persistent setting |
 
 ## Uninstall modes
 
@@ -54,7 +56,8 @@ Plain `local-ai uninstall`:
 1. plans removal of the manager executable, marker-owned PATH change, manager cache, rollback binary, and manager state/log directories;
 2. shows retained aliases, models, applications, profiles, extensions, and user files;
 3. writes a final redacted uninstall receipt before deleting active state and retains no hidden background service;
-4. does not remove VS Code, Ollama, models, aliases, extensions, or profiles.
+4. removes a manager-installed official Copilot CLI and the manager-owned `copilot-local` launcher, but retains externally detected Copilot executables;
+5. does not remove VS Code, Ollama, models, aliases, extensions, or profiles.
 
 Optional destructive flags are separate and non-implied:
 
@@ -74,4 +77,3 @@ Each flag requires an ownership check, dependency plan, explicit confirmation ev
 - Backups are restored only when their digest and ownership metadata match the receipt.
 - A partial uninstall leaves state sufficient to resume. Failure to persist that state stops further destructive work.
 - Unsupported VS Code profile deletion is always a manual action and returns `manual_required` when it is the only remaining requested action.
-

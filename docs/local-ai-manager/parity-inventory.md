@@ -94,7 +94,18 @@ This inventory maps behavior in `scripts/setup-local-ai.sh`, `scripts/setup-loca
 | Self-update and one verified rollback | `update` | `update` | Stable | New capability; never silent/background. |
 | Ownership-aware uninstall | `uninstall` | `install`, `state` | Stable | Follows [asset ownership rules](asset-ownership.md). |
 | Redacted support report | `report` | `app` | Stable | Allowlisted facts only. |
-| Preserve no-change boundaries for drivers, firewall, telemetry, approvals, trust, and global policy | All | `app` policy | Stable | Violations are release blockers. |
+| Preserve no-change boundaries for drivers, firewall, global telemetry settings, approvals, trust, and global policy | All | `app` policy | Stable | The documented per-process Copilot CLI telemetry opt-out does not modify a global setting; other violations are release blockers. |
 | Mocked Bash/PowerShell coverage | Go unit/contract/integration suites | All owners | Stable | Existing tests define parity evidence, not the new implementation harness. |
 | Native four-platform hardware and UI validation | Release acceptance | Maintainers | Manual | Required before stable release; never inferred from mocks. |
 
+## GitHub Copilot CLI local-provider lifecycle
+
+| Capability | Planned command | Domain owner | Status | Contract note |
+|---|---|---|---:|---|
+| Prefer an existing supported official `copilot` executable | `copilot configure`, `status`, `doctor` | `copilot`, `platform` | Stable | Probe the executable version and classify it as externally detected; never replace an unrelated executable. |
+| Install official Copilot CLI user-locally | `copilot configure`, `repair` | `copilot`, `install` | Stable | Use official `github/copilot-cli` stable release assets, GitHub API SHA-256 digests, and `SHA256SUMS.txt`; never globally install npm packages. |
+| Enforce supported local-provider minimum | `copilot configure`, `doctor`, `verify` | `copilot` | Stable | Minimum `1.0.100`, verified October 20, 2026, guarantees the required no-telemetry flag; current stable installation remains preferred. |
+| Create cross-platform `copilot-local` launcher | `copilot configure`, `copilot open` | `copilot` | Stable | Atomically sets loopback `/v1`, `openai`, `responses`, exact alias, and `COPILOT_OFFLINE=true`, then forwards all user arguments unchanged. |
+| Prevent silent GitHub-hosted inference fallback | `copilot open`, `doctor` | `copilot` | Stable | Missing Ollama, alias, provider, launcher, or supported CLI is a hard diagnosable failure. |
+| Resume, repair, rollback, and uninstall | `copilot configure --resume`, `repair`, `uninstall` | `copilot`, `state` | Stable | Transaction receipts recover verified interrupted mutations; only manager-owned executable and launcher assets are removed. |
+| Verify Copilot Chat capability in Local AI | `vscode configure`, `verify` | `vscode` | Stable | Supported VS Code builds bundle Copilot Chat; the manager never marketplace-installs it. No supported non-bundled path exists in the current minimum-version contract. |

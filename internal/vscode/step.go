@@ -233,6 +233,16 @@ func evidenceForStatus(observedAt time.Time, status Status) []state.Evidence {
 				"version":      extensionVersion,
 			},
 		},
+		{
+			Kind:       state.EvidenceExtensionState,
+			ObservedAt: observedAt,
+			Attributes: state.SafeAttributes{
+				"extension_id": BundledCopilotChatExtensionID,
+				"present":      status.CopilotChatAvailable,
+				"verified":     status.CopilotChatAvailable,
+				"state":        status.CopilotChatSource,
+			},
+		},
 	}
 }
 

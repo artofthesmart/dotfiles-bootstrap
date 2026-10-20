@@ -33,7 +33,7 @@ The manager is not part of the dotfiles bootstrap. It must not call or modify `b
 | `internal/catalog` | Catalog validation, eligibility, deterministic scoring, exclusions, and explanations | Network mutation or unreviewed catalog updates |
 | `internal/ollama` | Registry/API clients, bounded GGUF metadata, service behavior, acquisition, aliases, context/offload and tool verification | Selecting cloud fallback or changing GPU drivers |
 | `internal/vscode` | Supported CLI discovery, version/profile/extension checks, open behavior, and UI handoff | Editing undocumented profile storage, workspace trust, or approvals |
-| `internal/copilot` | Official Copilot CLI lifecycle, manager-owned offline launcher, and typed CLI readiness/open behavior | Model-generated tool execution, approval bypass, or undocumented VS Code storage edits |
+| `internal/copilot` | Official Copilot CLI discovery/install, version gate, manager-owned offline Ollama launcher, typed readiness/open behavior, diagnosis, repair, rollback, and ownership-aware uninstall | Cloud fallback, global npm installation, unrelated third-party launchers, model-generated tool execution, approval bypass, undocumented VS Code storage edits, or disabling security controls |
 | `internal/install` | Official installers, HTTPS-only redirect policy, integrity hooks, progress, and rerun safety | Silent elevation or disabling OS protections |
 | `internal/update` | Verified release selection, atomic replacement, one rollback copy | Background or silent updating |
 | `internal/cli` | Flags, config precedence, subcommands, event writer, and exit mapping | Business decisions |
@@ -102,7 +102,7 @@ Each step declares:
 | `vscode configure` | `vscode` | Yes |
 | `vscode open` | `vscode` | No, except an explicit supported profile-creation plan |
 | `copilot configure` | `copilot` | Yes |
-| `copilot open` | `copilot` | No |
+| `copilot open` | `copilot` | No; executes the verified manager launcher |
 | `verify` | `app` verification policy | No |
 | `update`, `update --rollback` | `update` | Yes |
 | `uninstall` | `install` plus ownership policy | Yes |

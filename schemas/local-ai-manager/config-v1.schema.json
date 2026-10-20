@@ -28,6 +28,9 @@
     "vscode": {
       "$ref": "#/$defs/vscode"
     },
+    "copilot": {
+      "$ref": "#/$defs/copilot"
+    },
     "repair": {
       "$ref": "#/$defs/repair"
     },
@@ -218,6 +221,41 @@
             "suppress"
           ],
           "default": "show"
+        }
+      }
+    },
+    "copilot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "install_official_cli": {
+          "type": "boolean",
+          "default": true,
+          "description": "Permit a verified user-local install from the official github/copilot-cli stable release when no supported official executable is available."
+        },
+        "minimum_version": {
+          "const": "1.0.100",
+          "default": "1.0.100",
+          "description": "Conservative supported floor verified on 2026-10-20 for direct local providers plus --disable-client-telemetry."
+        },
+        "provider_base_url": {
+          "type": "string",
+          "pattern": "^http://(?:127\\.0\\.0\\.1|localhost)(?::[0-9]{1,5})?/v1$",
+          "default": "http://127.0.0.1:11434/v1",
+          "description": "Only the documented unauthenticated loopback Ollama OpenAI-compatible /v1 endpoint is accepted."
+        },
+        "offline": {
+          "const": true,
+          "default": true,
+          "description": "COPILOT_OFFLINE=true is mandatory; cloud fallback cannot be enabled through configuration."
+        },
+        "provider_type": {
+          "const": "openai",
+          "default": "openai"
+        },
+        "wire_api": {
+          "const": "responses",
+          "default": "responses"
         }
       }
     },

@@ -11,6 +11,7 @@ These documents define the product boundary for the independently implemented `l
 - [Current-script parity inventory](parity-inventory.md)
 - [Issue-code and exit-code contract](issue-and-exit-codes.md)
 - [Asset ownership and uninstall rules](asset-ownership.md)
+- [Official Copilot CLI local-provider contract](copilot-local.md)
 
 Machine-readable contracts:
 
@@ -25,7 +26,7 @@ User-local bootstrap, explicit update/rollback, PATH ownership, and friend-previ
 
 `internal/ollama` implements the production Ollama domain behind later CLI/TUI adapters: bounded loopback API calls, HTTPS-only exact-manifest and GGUF range inspection, exact-tag reuse/acquisition, local GGUF import, safe 65,536-token aliases, live structured-tool and `/api/ps` verification, diagnosis and consent-aware repair planning, ownership-safe removal, and resumable state-engine steps.
 
-The CLI/TUI adapter exposes typed extension points for `copilot configure` and `copilot open`. The Copilot lifecycle domain owns official CLI installation/reuse, the manager-owned `copilot-local` launcher, explicit offline mode, and VS Code Copilot Chat experience verification; renderers do not duplicate those decisions.
+`internal/copilot` implements official Copilot CLI discovery, conservative version gating, verified user-local stable-release installation, exact offline Ollama provider launchers, resumable receipts, diagnosis, repair, rollback, redaction, and ownership-aware uninstall. The CLI/TUI adapter exposes typed `copilot configure` and `copilot open` commands without duplicating those decisions.
 
 ## Versioning policy
 

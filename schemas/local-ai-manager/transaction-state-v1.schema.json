@@ -193,6 +193,12 @@
         "LAI-VSCODE-004",
         "LAI-VSCODE-005",
         "LAI-VSCODE-006",
+        "LAI-COPILOT-001",
+        "LAI-COPILOT-002",
+        "LAI-COPILOT-003",
+        "LAI-COPILOT-004",
+        "LAI-COPILOT-005",
+        "LAI-COPILOT-006",
         "LAI-STATE-001",
         "LAI-STATE-002",
         "LAI-STATE-003",
@@ -291,6 +297,7 @@
             "catalog",
             "ollama",
             "vscode",
+            "copilot",
             "install",
             "update"
           ]
@@ -568,6 +575,8 @@
             "vscode_extension",
             "ollama_source_model",
             "ollama_alias",
+            "copilot_application",
+            "copilot_launcher",
             "state_file",
             "backup_file"
           ]
@@ -737,6 +746,7 @@
             "model",
             "runtime",
             "vscode",
+            "copilot",
             "state",
             "config",
             "asset",

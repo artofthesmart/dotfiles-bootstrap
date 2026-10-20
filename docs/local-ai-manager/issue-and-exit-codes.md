@@ -58,6 +58,12 @@ Remediation kinds are `automatic`, `command`, `ui`, `policy`, `documentation`, o
 | `LAI-VSCODE-004` | Workspace trust or Restricted Mode blocks local behavior | Warning | 3 |
 | `LAI-VSCODE-005` | More than 128 tools require Configure Tools | Warning | 3 |
 | `LAI-VSCODE-006` | BYOK or utility-model selection requires supported UI action | Warning | 3 |
+| `LAI-COPILOT-001` | Official GitHub Copilot CLI is missing | Error | 11 |
+| `LAI-COPILOT-002` | GitHub Copilot CLI is below the supported local-provider minimum | Error | 11 |
+| `LAI-COPILOT-003` | Manager-owned `copilot-local` launcher is missing or invalid | Error | 11 |
+| `LAI-COPILOT-004` | Offline Ollama OpenAI Responses provider configuration is invalid | Error | 11 |
+| `LAI-COPILOT-005` | Exact selected `local-ai-...` alias is unavailable to Copilot CLI | Error | 32 |
+| `LAI-COPILOT-006` | Loopback Ollama provider is unavailable to Copilot CLI | Error | 32 |
 | `LAI-STATE-001` | State file is unreadable, invalid, or corrupt | Error | 50 |
 | `LAI-STATE-002` | State schema is unsupported or migration failed | Error | 50 |
 | `LAI-STATE-003` | Transaction is incompatible with resume | Error | 50 |
@@ -101,4 +107,3 @@ New codes may be appended within an existing category. Implementations must not 
 4. An integrity failure outranks network failure; state write/rollback failure outranks the operation that triggered it.
 5. `doctor` returns 0 when no error-severity issue exists, 3 when only manual/warning issues require action, and the mapped nonzero error exit otherwise.
 6. JSON `result.exit_code`, process exit status, and human summary must agree.
-

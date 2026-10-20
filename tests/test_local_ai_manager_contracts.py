@@ -219,6 +219,15 @@ class LocalAIManagerContractTests(unittest.TestCase):
             ]["const"],
             True,
         )
+        copilot = schema["$defs"]["copilot"]["properties"]
+        self.assertEqual(copilot["minimum_version"]["const"], "1.0.100")
+        self.assertEqual(copilot["provider_type"]["const"], "openai")
+        self.assertEqual(copilot["wire_api"]["const"], "responses")
+        self.assertEqual(copilot["offline"]["const"], True)
+        self.assertEqual(
+            copilot["provider_base_url"]["default"],
+            "http://127.0.0.1:11434/v1",
+        )
 
     def test_catalog_requires_evidence_license_and_memory_components(self):
         schema = load_schema("catalog")
@@ -286,6 +295,7 @@ class LocalAIManagerContractTests(unittest.TestCase):
             "`catalog`",
             "`ollama`",
             "`vscode`",
+            "`copilot`",
             "`state`",
             "`update`",
         ):
