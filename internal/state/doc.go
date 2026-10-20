@@ -1,3 +1,4 @@
-// Package state owns versioned transaction persistence, migration, receipt
-// lookup, and rollback metadata. Implementations are added in a later phase.
+// Package state provides versioned transaction persistence, validated lifecycle
+// transitions, resumable step execution, privacy-safe events, and
+// ownership-aware rollback.
 package state
