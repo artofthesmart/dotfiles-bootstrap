@@ -669,7 +669,7 @@ function Test-LocalModel([int]$OutputTokens = 1024) {
     $script:ToolCheckPassed = $false
     $body = @{
         model = $script:LocalModel; stream = $false
-        options = @{ num_ctx = $script:Context; num_predict = $OutputTokens; temperature = 0 }
+        options = @{ num_predict = $OutputTokens; temperature = 0 }
         messages = @(@{ role = 'user'; content = 'What is the temperature in New York?' })
         tools = @(@{
             type = 'function'
@@ -702,6 +702,27 @@ function Test-LocalModel([int]$OutputTokens = 1024) {
         }
         throw [IO.InvalidDataException]::new(
             "Model $script:LocalModel downloaded successfully, but tool use is NOT verified. $detail Stop reason: $reason. A reply in Ollama chat alone does not prove Agent tool support.")
+    }
+    $processes = Invoke-OllamaApi 'ps'
+    $allocatedContext = $null
+    if ($processes.PSObject.Properties['models']) {
+        foreach ($loaded in $processes.models) {
+            $loadedName = $null
+            if ($loaded.PSObject.Properties['name']) { $loadedName = [string]$loaded.name }
+            elseif ($loaded.PSObject.Properties['model']) { $loadedName = [string]$loaded.model }
+            if ($loadedName -and
+                (Get-CanonicalModelName $loadedName) -ieq (Get-CanonicalModelName $script:LocalModel) -and
+                $loaded.PSObject.Properties['context_length']) {
+                $allocatedContext = [long]$loaded.context_length
+                break
+            }
+        }
+    }
+    if ($null -eq $allocatedContext) {
+        throw 'Ollama did not report the loaded model context after the test. Run ollama ps, verify the local-ai model is loaded, and rerun setup.'
+    }
+    if ($allocatedContext -lt $script:Context) {
+        throw "Ollama allocated only $allocatedContext context tokens for $script:LocalModel. VS Code requires at least $script:Context. In the Ollama app, open Settings, set Context length to at least 64K, restart Ollama, and rerun setup. For a service, start ollama serve with OLLAMA_CONTEXT_LENGTH=$script:Context."
     }
     $script:ToolCheckPassed = $true
     Write-Host 'Local tool-call check passed. Actual runtime/offload:'
@@ -777,21 +798,25 @@ Finish in the Local AI window (these UI steps are not automated):
 4. If the model is absent, run Ollama: Refresh Models from the Command Palette.
    If still absent, run Ollama: Diagnose Models and inspect the Ollama output.
    Do NOT select Auto or a cloud model.
-5. If the harness says the model supports only 128 tools, select Configure Tools
+5. The wizard verified Ollama allocated at least 65K without a request override.
+   If a later Ollama update resets it and VS Code warns about 32K, open the
+   Ollama app's Settings, set Context length to at least 64K, restart Ollama,
+   run Developer: Reload Window, and resend the prompt.
+6. If the harness says the model supports only 128 tools, select Configure Tools
    in the Chat input. Disable unneeded MCP servers and extension tool groups
    until 128 or fewer tools are enabled. Keep the core file/search/edit,
    terminal, problems/test and Git tools needed for coding. VS Code also offers
    the experimental github.copilot.chat.virtualTools.threshold setting for
    automatic grouping, but explicit selection is more predictable locally.
-6. In this profile's Settings, enable chat.agentHost.byokModels.enabled if
+7. In this profile's Settings, enable chat.agentHost.byokModels.enabled if
    required for the Copilot harness. Set chat.utilityModel and
    chat.utilitySmallModel to your local model using their model pickers.
    Verify Ollama's endpoint is http://127.0.0.1:11434. Remote provider
    configurations take precedence; remove obsolete built-in Ollama configs.
-7. Ask: "Suggest one small documentation improvement, apply it after approval,
+8. Ask: "Suggest one small documentation improvement, apply it after approval,
    then run an existing relevant test if available." Review tool approvals and
    the resulting diff; keep changes only if you want them.
-8. For metered cloud Copilot: Manage (gear) > Profiles > your previous profile
+9. For metered cloud Copilot: Manage (gear) > Profiles > your previous profile
    (usually Default), then select a cloud model in Chat. Your normal account,
    plan and organization policy apply. Return via Profiles > Local AI and
    explicitly select $script:LocalModel again. Profiles are not billing boundaries.
@@ -820,7 +845,10 @@ function Start-LocalAISetup {
     $script:Work = Join-Path ([IO.Path]::GetTempPath()) ('local-ai-setup-' + [guid]::NewGuid().ToString('N'))
     [void][IO.Directory]::CreateDirectory($script:Work)
     $previousHost = $env:OLLAMA_HOST
+    $previousContextLength = $env:OLLAMA_CONTEXT_LENGTH
+    $script:Context = 65536
     $env:OLLAMA_HOST = '127.0.0.1:11434'
+    $env:OLLAMA_CONTEXT_LENGTH = [string]$script:Context
     try {
         Write-SetupStep 1 'Install or reuse VS Code and Ollama'
         Install-Applications
@@ -838,6 +866,7 @@ function Start-LocalAISetup {
         Connect-Code
     } finally {
         $env:OLLAMA_HOST = $previousHost
+        $env:OLLAMA_CONTEXT_LENGTH = $previousContextLength
         Remove-Item -LiteralPath $script:Work -Recurse -Force
     }
 }

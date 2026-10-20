@@ -168,6 +168,17 @@ For each platform, exercise these steps:
   supported window does not prove extended-context support. Exact installed
   source models are reused without a pull/update. Existing aliases can be
   replaced after confirmation; source weights are reused for the alias.
+  The live smoke test deliberately omits a per-request `num_ctx`, then reads
+  `/api/ps` and requires an actual allocation of at least 65536. This mirrors the
+  official VS Code extension instead of masking Ollama's server-wide default.
+  The wizard exports `OLLAMA_CONTEXT_LENGTH=65536` before starting a new Ollama
+  server. It does not silently restart or rewrite an already-running desktop app
+  or system service, so the allocation check remains required.
+  Current Ollama defaults 24-48 GiB VRAM systems to 32K. If detected, set the
+  Ollama app's **Settings > Context length** to at least 64K, restart Ollama, and
+  rerun. For a service, start `ollama serve` with
+  `OLLAMA_CONTEXT_LENGTH=65536`. Verify the exact `local-ai-...` alias, not its
+  base model, appears in `ollama ps`.
   If nothing fits at 65536+, Gemini must return `MODEL: NONE` and explain why,
   rather than recommending a 32K model or lowering the context. Entering NONE
   stops the wizard with that explanation instead of trying to download it.

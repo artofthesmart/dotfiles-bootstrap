@@ -91,6 +91,12 @@ function Invoke-OllamaApi([string]$Endpoint, $Body = $null) {
             [pscustomobject]@{ function = [pscustomobject]@{ name = 'get_temperature'; arguments = [pscustomobject]@{ city = $value } } }
         ) } }
     }
+    if ($Endpoint -eq 'ps') {
+        $allocated = if ($script:Mode -eq 'small-allocation') { 32768 } else { 65536 }
+        return [pscustomobject]@{ models = @(
+            [pscustomobject]@{ name = "$($script:LocalModel):latest"; context_length = $allocated }
+        ) }
+    }
     return [pscustomobject]@{ version = 'fixture' }
 }
 function Get-ModelVolume {
@@ -326,9 +332,14 @@ try {
     }
     Test-Case 'Actual valid tool-call output checked' {
         Test-LocalModel
-        Assert-True ($script:LastBody.options.num_ctx -eq $script:Context) 'Wrong inference context'
+        Assert-True (-not $script:LastBody.options.ContainsKey('num_ctx')) 'Smoke test masks the server default context'
         Assert-True ($script:LastBody.tools[0].function.name -eq 'get_temperature') 'Wrong tool'
         Assert-True ($script:LastBody.messages[0].content -eq 'What is the temperature in New York?') 'Not using documented natural-language tool request'
+    }
+    Test-Case 'Server default context below minimum is rejected' {
+        $script:Mode = 'small-allocation'
+        Assert-Throws { Test-LocalModel } 'allocated only 32768[\s\S]*Ollama app[\s\S]*64K'
+        $script:Mode = 'ok'
     }
     Test-Case 'Absent wrong malformed and HTTP-error tool responses fail' {
         foreach ($mode in @('no-call', 'wrong-call', 'json-prose', 'malformed', 'http-error')) {
@@ -372,6 +383,7 @@ try {
         Assert-True ($source.Contains('model supports only 128 tools')) 'Missing tool-limit recovery'
         Assert-True ($source.Contains('Disable unneeded MCP servers')) 'Missing tool-selection guidance'
         Assert-True ($source.Contains('github.copilot.chat.virtualTools.threshold')) 'Missing virtual-tool alternative'
+        Assert-True ($source.Contains('$env:OLLAMA_CONTEXT_LENGTH = [string]$script:Context')) 'New Ollama servers do not inherit 65536 context'
         Assert-True ($source -notmatch 'Invoke-Expression|Set-ExecutionPolicy|AdapterRAM\s*=') 'Unexpected unsafe/global behavior'
         Assert-True ($source.Contains('checks the exact Ollama tag')) 'Missing exact-tag preflight explanation'
         Assert-True ($source.Contains('reused without pulling it again')) 'Missing installed-model reuse explanation'

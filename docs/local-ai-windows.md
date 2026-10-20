@@ -39,9 +39,9 @@ override managed controls.
    tag. The wizard gets the exact size itself, fixes context at `65536`, rejects
    anything outside the verified catalog, checks free disk, and shows a review.
    Installed models are reused without updating.
-   After download, the model appears in Ollama Desktop automatically. The wizard
-   then checks advertised tools, runs a harmless structured tool-call test, and
-   creates a `local-ai-...` model fixed to your chosen context.
+   After download, the wizard creates a `local-ai-...` alias, tests structured
+   tools, and verifies Ollama actually allocated 65K. If it reports 32K, set
+   Ollama **Settings > Context length** to 64K, restart it, and rerun.
 4. **Open or clone a repository.** The wizard configures a separate **Local AI**
    profile with bundled Copilot Chat and the official Ollama extension.
    In Chat, choose **Agent** in the mode control and your local model with the

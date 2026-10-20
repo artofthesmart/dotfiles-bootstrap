@@ -494,7 +494,7 @@ choose_model() {
 }
 check_model() {
     "$JQ" -n --arg model "$LOCAL_MODEL" --argjson context "$CONTEXT" '{
-        model:$model, stream:false, options:{num_ctx:$context,num_predict:1024,temperature:0},
+        model:$model, stream:false, options:{num_predict:1024,temperature:0},
         messages:[{role:"user",content:"What is the temperature in New York?"}],
         tools:[{type:"function",function:{name:"get_temperature",
           description:"Get the current temperature for a city",
@@ -506,6 +506,15 @@ check_model() {
     "$JQ" -e '.done == true and any(.message.tool_calls[]?;
         .function.name == "get_temperature" and (.function.arguments.city | ascii_downcase) == "new york")' "$WORK/chat.json" >/dev/null ||
         fail "Model did not produce the expected tool call. Try a reliable tool-capable model or compatible GGUF template."
+    api ps > "$WORK/ps.json" ||
+        fail "Ollama did not report the loaded model context after the test. Run ollama ps and rerun setup."
+    allocated_context=$("$JQ" -r --arg model "$LOCAL_MODEL" '
+        [.models[]? |
+          select(((.name // .model // "") | sub(":latest$"; "")) == ($model | sub(":latest$"; ""))) |
+          .context_length // empty][0] // 0' "$WORK/ps.json")
+    case "$allocated_context" in ''|*[!0-9]*) allocated_context=0 ;; esac
+    [ "$allocated_context" -ge "$CONTEXT" ] ||
+        fail "Ollama allocated only $allocated_context context tokens for $LOCAL_MODEL. VS Code requires at least $CONTEXT. In the Ollama app, open Settings, set Context length to at least 64K, restart Ollama, and rerun setup. For a service, start ollama serve with OLLAMA_CONTEXT_LENGTH=$CONTEXT."
     printf 'Local model tool-call check passed. Actual runtime/offload:\n'
     "$OLLAMA" ps
     printf 'CPU-only offload can be slow even if a GPU is installed. No GPU drivers were changed.\n'
@@ -554,21 +563,25 @@ Finish in the Local AI window (these UI steps are not automated):
 4. If the model is absent, run "Ollama: Refresh Models" from the Command Palette.
    If still absent, run "Ollama: Diagnose Models" and inspect the Ollama output.
    Do NOT select Auto or a cloud model.
-5. If the harness says the model supports only 128 tools, select Configure Tools
+5. The wizard verified Ollama allocated at least 65K without a request override.
+   If a later Ollama update resets it and VS Code warns about 32K, open the
+   Ollama app's Settings, set Context length to at least 64K, restart Ollama,
+   run "Developer: Reload Window", and resend the prompt.
+6. If the harness says the model supports only 128 tools, select Configure Tools
    in the Chat input. Disable unneeded MCP servers and extension tool groups
    until 128 or fewer tools are enabled. Keep the core file/search/edit,
    terminal, problems/test and Git tools needed for coding. VS Code also offers
    the experimental github.copilot.chat.virtualTools.threshold setting for
    automatic grouping, but explicit selection is more predictable locally.
-6. In this profile's Settings, enable chat.agentHost.byokModels.enabled if
+7. In this profile's Settings, enable chat.agentHost.byokModels.enabled if
    required for the Copilot harness. Set chat.utilityModel and
    chat.utilitySmallModel to your local model using their model pickers.
    Verify Ollama's endpoint is http://127.0.0.1:11434. Remote provider
    configurations take precedence; remove obsolete built-in Ollama configs.
-7. Ask: "Suggest one small documentation improvement, apply it after approval,
+8. Ask: "Suggest one small documentation improvement, apply it after approval,
    then run an existing relevant test if available." Review each tool approval
    and the resulting diff. Keep changes only if you want them.
-8. For metered cloud Copilot: Manage (gear) > Profiles > your previous profile
+9. For metered cloud Copilot: Manage (gear) > Profiles > your previous profile
    (usually Default), then select a cloud model in Chat. Your normal account,
    plan and organization policy apply. Return via Profiles > Local AI and
    explicitly select $LOCAL_MODEL again. A profile is not a billing boundary.
@@ -592,7 +605,9 @@ main() {
     trap cleanup EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
+    CONTEXT=65536
     export OLLAMA_HOST=127.0.0.1:11434
+    export OLLAMA_CONTEXT_LENGTH=$CONTEXT
     ensure_code
     ensure_ollama
     ensure_jq
