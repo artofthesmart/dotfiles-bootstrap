@@ -1,0 +1,58 @@
+package app
+
+var issueExits = map[IssueCode]ExitCode{
+	IssueHostUnsupported:          ExitUnsupportedHost,
+	IssueArchitectureUnsupported:  ExitUnsupportedHost,
+	IssueDesktopRequired:          ExitUnsupportedHost,
+	IssueHostVersionUnsupported:   ExitUnsupportedHost,
+	IssuePrerequisiteMissing:      ExitPrerequisiteFailure,
+	IssuePrerequisiteVersion:      ExitPrerequisiteFailure,
+	IssuePrerequisiteUnusable:     ExitPrerequisiteFailure,
+	IssuePolicyBlocked:            ExitPolicyOrPermissionFailure,
+	IssueConsentDeclined:          ExitCancelled,
+	IssueManualApproval:           ExitManualRequired,
+	IssueNetworkUnavailable:       ExitNetworkFailure,
+	IssueHTTPSPolicy:              ExitIntegrityFailure,
+	IssueDownloadInvalid:          ExitNetworkFailure,
+	IssueChecksumMismatch:         ExitIntegrityFailure,
+	IssuePublisherInvalid:         ExitIntegrityFailure,
+	IssueMetadataInconsistent:     ExitIntegrityFailure,
+	IssueCapacityInsufficient:     ExitInsufficientCapacity,
+	IssueMemoryInsufficient:       ExitInsufficientCapacity,
+	IssueCapacityUnknown:          ExitInsufficientCapacity,
+	IssueModelIncompatible:        ExitModelIncompatible,
+	IssueModelContextInsufficient: ExitModelIncompatible,
+	IssueModelRemote:              ExitModelIncompatible,
+	IssueModelToolsUnsupported:    ExitModelIncompatible,
+	IssueModelAcquisition:         ExitModelAcquisitionFailure,
+	IssueModelAlias:               ExitModelAcquisitionFailure,
+	IssueRuntimeUnavailable:       ExitRuntimeVerificationFailure,
+	IssueRuntimeToolCall:          ExitRuntimeVerificationFailure,
+	IssueRuntimeContext:           ExitRuntimeVerificationFailure,
+	IssueRuntimeOffloadUnknown:    ExitRuntimeVerificationFailure,
+	IssueRuntimeRestartRequired:   ExitManualRequired,
+	IssueVSCodeIntegration:        ExitVSCodeIntegrationFailure,
+	IssueVSCodeExtension:          ExitVSCodeIntegrationFailure,
+	IssueVSCodeAliasUnavailable:   ExitManualRequired,
+	IssueVSCodeTrust:              ExitManualRequired,
+	IssueVSCodeToolLimit:          ExitManualRequired,
+	IssueVSCodeModelSelection:     ExitManualRequired,
+	IssueStateFailure:             ExitStateOrTransactionFailure,
+	IssueStateSchema:              ExitStateOrTransactionFailure,
+	IssueStateResume:              ExitStateOrTransactionFailure,
+	IssueStateWrite:               ExitStateOrTransactionFailure,
+	IssueConfigurationInvalid:     ExitConfigurationFailure,
+	IssueConfigurationConflict:    ExitConfigurationFailure,
+	IssueAssetOwnership:           ExitStateOrTransactionFailure,
+	IssueAssetConfirmation:        ExitManualRequired,
+	IssueUpdateUnavailable:        ExitIntegrityFailure,
+	IssueUpdateSelfCheck:          ExitInternalFailure,
+	IssueInternal:                 ExitInternalFailure,
+}
+
+func ExitForIssue(code IssueCode) ExitCode {
+	if exit, ok := issueExits[code]; ok {
+		return exit
+	}
+	return ExitInternalFailure
+}

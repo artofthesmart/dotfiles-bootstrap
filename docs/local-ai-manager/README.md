@@ -31,3 +31,15 @@ The contract version and each schema discriminator are independent of the applic
 
 The JSON schemas use JSON Schema Draft 2020-12. Every persisted or streamed object carries an explicit `schema_version` discriminator.
 
+## Scaffold development
+
+The manager scaffold requires only Go 1.22 or newer:
+
+```sh
+make test
+make vet
+make fmt-check
+make build
+```
+
+Use `make cross-build` to compile Windows, macOS, and Linux binaries for amd64 and arm64. Generated binaries are written under `build/`; remove them with `make clean`.
