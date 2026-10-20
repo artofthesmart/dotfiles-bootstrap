@@ -63,3 +63,7 @@ access are unchanged.
 **Sources:** [Linux installation](https://docs.ollama.com/linux),
 [VS Code Linux](https://code.visualstudio.com/docs/setup/linux),
 [VS Code models](https://code.visualstudio.com/docs/agent-customization/language-models).
+
+## Use the same model in the terminal
+
+Install the official GitHub Copilot CLI once with `curl -fsSL https://gh.io/copilot-install | bash`, then run `scripts/copilot-local.sh` from this repository inside any project folder. It uses your `local-ai-...` model in offline mode, so nothing is sent to GitHub-hosted models. Any arguments, such as `-p "explain this repo"`, are passed straight to Copilot.
