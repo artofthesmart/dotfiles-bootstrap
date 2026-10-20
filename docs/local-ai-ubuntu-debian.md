@@ -37,11 +37,12 @@ bash ./scripts/setup-local-ai.sh
    memory from specifications if available; advice is not a performance
    guarantee.
 3. **Get and check the model.** Enter the recommendation, storage estimate and
-   context budget. The wizard downloads the model, creates a `local-ai-...`
-   context-budget copy, and checks a harmless tool request without executing
-   that tool. Compatible, manually downloaded Hugging Face GGUF files have a
-   guided import alternative. Start Ollama when prompted if its service is not
-   already responding.
+   context budget. Before a large pull, the wizard verifies the exact registry
+   tag, actual layer size, GGUF context limit and free disk; a known 32K tag is
+   rejected before download. Installed models are reused without updating.
+   It creates a `local-ai-...` context-budget model and checks a harmless
+   structured tool call. Compatible manually downloaded GGUF files have a
+   guided import alternative. Start Ollama when prompted if needed.
 4. **Use your checkout.** Official Chat/Ollama extensions are installed into a
    separate **Local AI** profile. Follow the final UI steps: choose **Agent**,
    explicitly select the local Ollama model, and set utility models to local

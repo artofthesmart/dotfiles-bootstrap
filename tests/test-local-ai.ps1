@@ -40,6 +40,7 @@ $script:Answers = [Collections.Generic.Queue[string]]::new()
 $script:Questions = [Collections.Generic.List[string]]::new()
 $script:Calls = [Collections.Generic.List[object]]::new()
 $script:Mode = 'ok'
+$script:InstalledModel = $null
 $script:ToolCheckPassed = $false
 $script:PromptFolder = Join-Path $script:Fixture 'Documents'
 function Get-PromptPath {
@@ -95,6 +96,17 @@ function Get-ModelVolume {
     $space = if ($script:Mode -eq 'low-disk') { 1GB } else { 100GB }
     return [pscustomobject]@{ AvailableFreeSpace = $space }
 }
+function Test-ModelInstalled([string]$Name) {
+    return $null -ne $script:InstalledModel -and (Get-CanonicalModelName $Name) -ieq (Get-CanonicalModelName $script:InstalledModel)
+}
+function Get-RemoteOllamaModelInfo([string]$Name) {
+    $context = if ($script:Mode -in @('short-context', 'info-context')) { 32768 } else { 131072 }
+    return [pscustomobject]@{
+        Model = Get-CanonicalModelName $Name
+        DownloadBytes = 4GB
+        ContextLength = $context
+    }
+}
 function Get-CimInstance([string]$ClassName, [string[]]$Property) {
     switch ($ClassName) {
         'Win32_OperatingSystem' { return [pscustomobject]@{ Caption = 'Fixture Windows'; Version = '10.0.22631'; CSName = 'DO-NOT-SHARE-HOST' } }
@@ -119,6 +131,26 @@ try {
             Assert-True (-not (Test-ModelName $bad)) "Accepted unsafe model $bad"
         }
     }
+    Test-Case 'GGUF context metadata parser reads exact limit' {
+        $memory = [IO.MemoryStream]::new()
+        $writer = [IO.BinaryWriter]::new($memory, [Text.Encoding]::UTF8, $true)
+        try {
+            $writer.Write([Text.Encoding]::ASCII.GetBytes('GGUF'))
+            $writer.Write([uint32]3)
+            $writer.Write([uint64]0)
+            $writer.Write([uint64]1)
+            $key = [Text.Encoding]::UTF8.GetBytes('qwen2.context_length')
+            $writer.Write([uint64]$key.Length)
+            $writer.Write($key)
+            $writer.Write([uint32]4)
+            $writer.Write([uint32]32768)
+            $writer.Flush()
+            Assert-True ((Get-GgufContextLength $memory.ToArray()) -eq 32768) 'Wrong GGUF context value'
+        } finally {
+            $writer.Dispose()
+            $memory.Dispose()
+        }
+    }
     Test-Case 'Cancelled prompt is explicit' {
         Set-Answers @('q')
         Assert-Throws { Read-Choice 'fixture' } 'cancelled'
@@ -138,6 +170,7 @@ try {
         Assert-True ($text.Contains('up to 50% of installed RAM (16 GiB)')) 'Missing RAM-derived iGPU planning ceiling'
         Assert-True ($text.Contains('NOT a fixed reservation')) 'Shared memory described as fixed'
         Assert-True ($text.Contains('Do not infer a BIOS carve-out')) 'Missing anti-inference memory rule'
+        Assert-True ($text -notmatch 'installing 96 GiB') 'Prompt contains stale hardcoded memory example'
         Assert-True ($text.Contains('Do not claim exact remaining/free RAM')) 'Missing free-memory uncertainty'
         Assert-True (@($script:Questions | Where-Object { $_ -match 'Optional GPU memory' }).Count -eq 0) 'Still asks for ambiguous shared VRAM'
         Assert-True ($text.Contains('MANDATORY FOR THIS SETUP')) 'Missing required context emphasis'
@@ -182,9 +215,9 @@ try {
     Test-Case 'Low disk rejected before pull' {
         $script:Mode = 'low-disk'
         $script:Calls.Clear()
-        Set-Answers @('1', 'model', '4')
+        Set-Answers @('1', 'model', '4', '')
         Assert-Throws { Select-LocalModel } 'Not enough'
-        Assert-True ($script:Calls.Count -eq 0) 'Downloaded despite low disk'
+        Assert-True (@($script:Calls | Where-Object { $_.Arguments[0] -eq 'pull' }).Count -eq 0) 'Downloaded despite low disk'
         $script:Mode = 'ok'
     }
     Test-Case 'Invalid size/context rejected before pull' {
@@ -205,14 +238,24 @@ try {
         foreach ($mode in @('short-context', 'info-context')) {
             $script:Mode = $mode
             Set-Answers @('1', 'model', '1', '', 'y')
-            Assert-Throws { Select-LocalModel } '32768-token context'
+            Assert-Throws { Select-LocalModel } '32768 context tokens'
         }
+        Assert-True (@($script:Calls | Where-Object { $_.Arguments[0] -eq 'pull' }).Count -eq 0) 'Downloaded a known 32K model'
         Assert-True (@($script:Calls | Where-Object { $_.Arguments[0] -eq 'create' }).Count -eq 0) 'Created unsupported context alias'
         $script:Mode = 'unknown-context'
         Set-Answers @('1', 'model', '1', '', 'y')
         Select-LocalModel
         Assert-True ($script:Context -eq 65536) 'Default context is not 65536'
         $script:Mode = 'ok'
+    }
+    Test-Case 'Installed exact model is reused without pull' {
+        $script:InstalledModel = 'model:q4'
+        $script:Calls.Clear()
+        Set-Answers @('1', 'model:q4', '4', '', 'y')
+        Select-LocalModel
+        Assert-True (@($script:Calls | Where-Object { $_.Arguments[0] -eq 'pull' }).Count -eq 0) 'Installed model was pulled again'
+        Assert-True (@($script:Calls | Where-Object { $_.Arguments[0] -eq 'create' }).Count -eq 1) 'Local context alias was not created'
+        $script:InstalledModel = $null
     }
     Test-Case 'Remote and non-tool models rejected' {
         foreach ($mode in @('remote', 'no-tools')) {
@@ -271,9 +314,9 @@ try {
         Assert-True ($source -match "'--profile', 'Local AI', '--install-extension', 'Ollama.ollama'") 'Ollama extension not profile-scoped'
         Assert-True ($source -match "'--new-window', '--profile', 'Local AI', \`$repo") 'Repository launch not profile-scoped'
         Assert-True ($source -notmatch 'Invoke-Expression|Set-ExecutionPolicy|AdapterRAM\s*=') 'Unexpected unsafe/global behavior'
-        Assert-True ($source.Contains('Click the model selector')) 'Missing Desktop model-selector instruction'
-        Assert-True ($source.Contains('type "Say hello" and press Enter')) 'Missing simple first prompt'
-        Assert-True ($source.Contains('Return here and enter that same model name')) 'Missing return-to-wizard instruction'
+        Assert-True ($source.Contains('checks the exact Ollama tag')) 'Missing exact-tag preflight explanation'
+        Assert-True ($source.Contains('reused without pulling it again')) 'Missing installed-model reuse explanation'
+        Assert-True ($source.Contains('[int]$response.StatusCode -ne 206')) 'Bounded registry range response is not enforced'
     }
     Test-Case 'Installer signature mismatch rejected' {
         function Get-AuthenticodeSignature { return [pscustomobject]@{ Status = 'Valid'; SignerCertificate = [pscustomobject]@{ Subject = 'Untrusted publisher' } } }

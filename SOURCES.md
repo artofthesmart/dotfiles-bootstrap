@@ -132,6 +132,7 @@ mocked test success is not proof of platform compatibility.
 | Named Local AI profile creation, profile-scoped installs and launch | [CLI](https://code.visualstudio.com/docs/configure/command-line), [profiles](https://code.visualstudio.com/docs/configure/profiles) |
 | BYOK agents, tool capability, utility models, deprecated built-in Ollama provider, account-dependent feature limits | [VS Code language models](https://code.visualstudio.com/docs/agent-customization/language-models) |
 | Local model pulls, GGUF import and context-budget aliases | [CLI](https://docs.ollama.com/cli), [import](https://docs.ollama.com/import), [Modelfile](https://docs.ollama.com/modelfile) |
+| Exact-tag preflight reads the Ollama registry manifest for layer size and a 1 MiB byte range from the GGUF model layer for `*.context_length`; failure stops before `ollama pull` | [Ollama registry/download implementation](https://github.com/ollama/ollama/blob/main/server/download.go), [Ollama GGUF metadata implementation](https://github.com/ollama/ollama/tree/main/fs/gguf), [GGUF specification](https://github.com/ggml-org/ggml/blob/master/docs/gguf.md) |
 | Loopback API `/api/version`, `/api/show`, `/api/chat`, cloud metadata and tool-call validation | [Official API reference](https://github.com/ollama/ollama/blob/main/docs/api.md), [response types](https://github.com/ollama/ollama/blob/main/api/types.go) |
 | Natural-language `get_temperature` smoke test; no actual tool execution | [Ollama tool-calling example](https://docs.ollama.com/capabilities/tool-calling) |
 | Windows dynamic shared-memory accounting; 50% of system RAM used only as a planning ceiling, not an Ollama guarantee | [Microsoft DirectX: GPUs in Task Manager](https://devblogs.microsoft.com/directx/gpus-in-the-task-manager/) |
@@ -141,7 +142,9 @@ mocked test success is not proof of platform compatibility.
 The wizard does not call Gemini: it prepares an allowlisted prompt for the user
 to review and paste. Model choices are deliberately not pinned to a supposedly
 universal optimum. Prompt guidance asks Gemini for current model-source links,
-licenses, size, quantization, context and a smaller fallback. Hugging Face is a
+licenses, size, quantization, context and a smaller fallback. Gemini is advisory:
+the wizard independently checks exact-tag registry size and GGUF context before
+an Ollama Library pull. Hugging Face is a
 guided user download of a compatible single-file GGUF, not arbitrary repository
 execution.
 

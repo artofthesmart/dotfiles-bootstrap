@@ -197,10 +197,12 @@ hardware_prompt() {
         fi
     fi
     printf '\nGPU information: %s\n' "$gpu"
-    ask "Optional GPU memory in GiB from your hardware specification (Enter if unknown; unified memory is not extra VRAM)"
-    if [ -n "$ANSWER" ]; then
-        [[ "$ANSWER" =~ ^[0-9]+([.][0-9]+)?$ ]] || fail "GPU memory must be a number in GiB."
-        vram="$ANSWER GiB (user supplied; not automatically verified)"
+    if [ "$OS" = Linux ] && [ "$vram" = unknown ]; then
+        ask "Optional DEDICATED GPU VRAM in GiB from its specification (Enter if unknown; do not enter integrated/shared RAM)"
+        if [ -n "$ANSWER" ]; then
+            [[ "$ANSWER" =~ ^[0-9]+([.][0-9]+)?$ ]] || fail "Dedicated GPU VRAM must be a number in GiB."
+            vram="$ANSWER GiB dedicated VRAM (user supplied; not automatically verified)"
+        fi
     fi
     free_gib=$(free_kib | awk '{printf "%.1f", $1/1048576}')
     {
@@ -231,6 +233,12 @@ Require evidence of structured Ollama API tool_calls for the exact recommended
 variant/template, not just coding benchmarks, a tools label, or JSON in chat text.
 If exact-variant tool behavior is unverified, state that prominently after the
 copy-back block; do not promise VS Code Agent compatibility.
+For integrated or unified-memory GPUs, treat RAM as one physical pool. Do not add
+shared graphics memory to RAM as extra capacity or infer a fixed GPU reservation.
+Treat DOWNLOAD_GIB as an estimate only. The wizard independently checks the exact
+tag's registry layers and GGUF context metadata before any Ollama Library download.
+Do not infer an exact tag's context from family-level claims, a different quantization,
+or a model card alone. Cite the exact Ollama tag page and the source for context claims.
 MANDATORY FOR THIS SETUP: We need at least 65536 tokens of context for the
 VS Code Ollama extension. Recommend only models whose supported context window
 is at least 65536 AND whose weights plus KV cache at that context fit this
@@ -261,22 +269,78 @@ valid_model() {
     [[ "$1" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*(:[a-zA-Z0-9][a-zA-Z0-9._-]*)?$ ]] &&
         [[ ! "$1" =~ [cC][lL][oO][uU][dD] ]]
 }
-choose_model() {
-    local source size needed available gguf import_path context
-    printf '\nChoose a small, tool-capable model from https://ollama.com/library to run on this computer.\n'
-    printf 'Use the Gemini recommendation to check that it fits your memory and supports Agent tools.\n'
-    if [ "$OS" = Darwin ]; then
-        printf 'Download it in Ollama Desktop:\n'
-        printf '  1. Open Ollama from Applications.\n'
-        printf '  2. Click the model selector and type the exact name Gemini recommended, including any size tag like :32b.\n'
-        printf '     Keep the exact tag Gemini gave you; a size tag alone does not establish tool or 65536-context support.\n'
-        printf '  3. Select the matching LOCAL model and click its download icon if shown. Do not choose a cloud model.\n'
-        printf '  4. Type "Say hello" in the message box and press Enter. If needed, Ollama downloads the model before replying.\n'
-        printf '  5. Wait for the download and reply. Return here and enter that same model name.\n'
+canonical_model() {
+    case "$1" in *:*) printf '%s' "$1" ;; *) printf '%s:latest' "$1" ;; esac
+}
+model_installed() {
+    local wanted
+    wanted=$(canonical_model "$1")
+    "$OLLAMA" list | awk -v wanted="$wanted" 'NR > 1 && tolower($1) == tolower(wanted) { found=1 } END { exit !found }'
+}
+gguf_context_from_file() {
+    local file=$1 suffix='.context_length' position type_offset value_offset type
+    [ "$(head -c 4 "$file")" = GGUF ] || return 1
+    position=$(LC_ALL=C grep -abo "$suffix" "$file" | head -n 1 | cut -d: -f1) || return 1
+    [ -n "$position" ] || return 1
+    type_offset=$((position + ${#suffix}))
+    value_offset=$((type_offset + 4))
+    type=$(od -An -tu4 -N4 -j "$type_offset" "$file" | tr -d '[:space:]')
+    case "$type" in
+        4) od -An -tu4 -N4 -j "$value_offset" "$file" | tr -d '[:space:]' ;;
+        10) od -An -tu8 -N8 -j "$value_offset" "$file" | tr -d '[:space:]' ;;
+        *) return 1 ;;
+    esac
+}
+registry_fetch() {
+    curl --fail --location --silent --show-error --proto '=https' --tlsv1.2 \
+        --connect-timeout 20 --max-time 60 "$@"
+}
+remote_model_preflight() {
+    local canonical name tag manifest digest prefix
+    canonical=$(canonical_model "$MODEL")
+    name=${canonical%%:*}
+    tag=${canonical#*:}
+    manifest="$WORK/registry-manifest.json"
+    registry_fetch -H 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
+        "https://registry.ollama.ai/v2/library/$name/manifests/$tag" -o "$manifest" ||
+        fail "Could not verify exact tag $canonical in the Ollama registry. No model was downloaded."
+    digest=$("$JQ" -r '[.layers[] | select(.mediaType == "application/vnd.ollama.image.model") | .digest]
+        | if length == 1 then .[0] else empty end' "$manifest")
+    [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] ||
+        fail "Registry metadata for $canonical did not contain one local model layer. No model was downloaded."
+    REGISTRY_BYTES=$("$JQ" '[.layers[].size | select(type == "number")] | add // 0' "$manifest")
+    [ "$REGISTRY_BYTES" -gt 0 ] ||
+        fail "Registry metadata for $canonical did not report a download size. No model was downloaded."
+    prefix="$WORK/registry-model-prefix.gguf"
+    registry_fetch --range 0-1048575 --max-filesize 2097152 \
+        "https://registry.ollama.ai/v2/library/$name/blobs/$digest" -o "$prefix" ||
+        fail "Could not read exact-tag GGUF metadata for $canonical. No model was downloaded."
+    REGISTRY_CONTEXT=$(gguf_context_from_file "$prefix") ||
+        fail "The exact-tag GGUF metadata did not expose a context limit. No model was downloaded."
+    REGISTRY_MODEL=$canonical
+}
+fetch_local_model_metadata() {
+    "$JQ" -n --arg model "$MODEL" '{model:$model}' > "$WORK/show-request.json"
+    api show -H 'Content-Type: application/json' --data-binary "@$WORK/show-request.json" > "$WORK/show.json"
+}
+validate_local_model_metadata() {
+    "$JQ" -e '(.remote_host // "") == "" and (.remote_model // "") == ""' "$WORK/show.json" >/dev/null ||
+        fail "This model routes to cloud inference; choose a local weights model."
+    LOCAL_LIMIT=$("$JQ" '[.details.context_length,
+        (.model_info as $info | $info[($info["general.architecture"] // "") + ".context_length"])]
+        | map(select(type == "number" and . > 0)) | min // 0' "$WORK/show.json")
+    if [ "$LOCAL_LIMIT" -gt 0 ] && [ "$CONTEXT" -gt "$LOCAL_LIMIT" ]; then
+        fail "This model advertises $LOCAL_LIMIT context tokens, below the requested $CONTEXT."
     fi
-    printf 'To download through this wizard instead, enter the exact model name and size tag below.\n'
-    printf 'If already downloaded in Desktop, the wizard checks/reuses those files; it does not download an extra copy.\n'
-    printf 'Choose local model weights, not a cloud model. The download may be several GB.\n'
+    [ "$LOCAL_LIMIT" -gt 0 ] || printf 'WARNING: Ollama did not report a supported context limit after acquisition.\n'
+    "$JQ" -e '(.capabilities // []) | index("tools") != null' "$WORK/show.json" >/dev/null ||
+        fail "Model does not advertise tools. Choose a tool-capable model; do not force-enable unsupported tools."
+}
+choose_model() {
+    local source size needed available gguf import_path context installed=false gguf_limit=0 exact_gib free_gib gguf_bytes
+    printf '\nChoose a small, tool-capable model from https://ollama.com/library to run on this computer.\n'
+    printf 'Gemini is advisory. Before downloading, this wizard checks the exact tag, registry size, and GGUF context metadata.\n'
+    printf 'Already-installed models are checked and reused without pulling them again.\n'
     ask "Model source: 1 = Ollama Library (recommended), 2 = import a downloaded Hugging Face GGUF"
     source=$ANSWER
     case "$source" in
@@ -300,51 +364,82 @@ choose_model() {
             ;;
         *) fail "Choose 1 or 2." ;;
     esac
-    ask "DOWNLOAD_GIB: paste the storage estimate from Gemini (number only; Enter if unknown; include an extra copy for GGUF import)"
+    ask "DOWNLOAD_GIB: paste Gemini's estimate (number only; Enter if unknown; verified registry/file size overrides it)"
     size=$ANSWER
     if [ -n "$size" ]; then
         [[ "$size" =~ ^[0-9]+([.][0-9]+)?$ ]] || fail "Model size must be numeric GiB."
-        needed=$(awk -v s="$size" 'BEGIN {printf "%.0f", (s+2)*1048576}')
-    else
-        printf 'WARNING: Download size unknown. Check free disk space against the model page before proceeding.\n'
-        needed=2097152
     fi
-    available=$(free_kib)
-    [ "$available" -ge "$needed" ] || fail "Not enough model-volume space (allowing 2 GiB spare). Free space or choose a smaller model."
     ask "CONTEXT_TOKENS: paste the context from Gemini (minimum 65536; Enter for 65536)"
     context=${ANSWER:-65536}
     [[ "$context" =~ ^[0-9]+$ ]] && [ "${#context}" -le 7 ] && [ "$context" -ge 65536 ] && [ "$context" -le 1048576 ] ||
         fail "Choose an integer context size from 65536 to 1048576. Ask Gemini for a compatible model rather than reducing context."
     CONTEXT=$((10#$context))
-    confirm "Acquire $MODEL with context $CONTEXT? Downloads may be large. Existing models with this name may be updated/replaced" || fail "Model acquisition cancelled."
+    LOCAL_MODEL="local-ai-${MODEL//:/-}"
     if [ "$source" = 1 ]; then
-        "$OLLAMA" pull "$MODEL" || fail "Download failed. Check the tag, disk space, and network, then rerun."
+        if model_installed "$MODEL"; then
+            installed=true
+            fetch_local_model_metadata
+            validate_local_model_metadata
+            printf '\nVerified review:\n  Exact model: %s\n  Download: already installed; no pull needed\n' "$(canonical_model "$MODEL")"
+            if [ "$LOCAL_LIMIT" -gt 0 ]; then printf '  Reported context: %s tokens\n' "$LOCAL_LIMIT"
+            else printf '  Reported context: unknown after local check\n'; fi
+            printf '  VS Code alias: %s (created/recreated after confirmation)\n' "$LOCAL_MODEL"
+            printf '  Tools: advertised locally; structured tool use is tested next\n'
+        else
+            remote_model_preflight
+            [ "$REGISTRY_CONTEXT" -ge "$CONTEXT" ] ||
+                fail "Exact tag $REGISTRY_MODEL advertises $REGISTRY_CONTEXT context tokens, below the requested $CONTEXT. No model was downloaded."
+            available=$(free_kib)
+            needed=$(( (REGISTRY_BYTES + 1023) / 1024 + 2097152 ))
+            [ "$available" -ge "$needed" ] ||
+                fail "Not enough model-volume space for the verified download plus 2 GiB spare. No model was downloaded."
+            exact_gib=$(awk -v b="$REGISTRY_BYTES" 'BEGIN {printf "%.1f", b/1073741824}')
+            free_gib=$(awk -v k="$available" 'BEGIN {printf "%.1f", k/1048576}')
+            printf '\nVerified review:\n'
+            printf '  Exact model: %s\n  Registry download: %s GiB\n  GGUF context limit: %s tokens\n' "$REGISTRY_MODEL" "$exact_gib" "$REGISTRY_CONTEXT"
+            printf '  Requested agent context: %s tokens\n  Free model-volume space: %s GiB\n' "$CONTEXT" "$free_gib"
+            printf '  VS Code alias: %s (created/recreated after confirmation)\n' "$LOCAL_MODEL"
+            printf '  Tools: not trusted yet; checked from local metadata and a live tool call after download\n'
+            if [ -n "$size" ] && awk -v a="$size" -v b="$exact_gib" 'BEGIN {d=a-b; if(d<0)d=-d; exit !(d>0.5)}'; then
+                printf 'WARNING: Gemini estimated %s GiB; exact registry layers total %s GiB. The registry value is used.\n' "$size" "$exact_gib"
+            fi
+        fi
+    else
+        head -c 1048576 "$gguf" > "$WORK/import-prefix.gguf"
+        gguf_limit=$(gguf_context_from_file "$WORK/import-prefix.gguf" || printf 0)
+        if [ "$gguf_limit" -gt 0 ] && [ "$gguf_limit" -lt "$CONTEXT" ]; then
+            fail "This GGUF advertises $gguf_limit context tokens, below the requested $CONTEXT."
+        fi
+        gguf_bytes=$(wc -c < "$gguf" | tr -d '[:space:]')
+        available=$(free_kib)
+        needed=$(( (gguf_bytes + 1023) / 1024 + 2097152 ))
+        [ "$available" -ge "$needed" ] || fail "Not enough model-volume space for another GGUF-sized copy plus 2 GiB spare."
+        printf '\nReview:\n  Import name: %s\n  GGUF file: %s\n' "$(canonical_model "$MODEL")" "$gguf"
+        if [ "$gguf_limit" -gt 0 ]; then printf '  GGUF context: %s tokens\n' "$gguf_limit"
+        else printf '  GGUF context: not found; Ollama will recheck after import\n'; fi
+        printf '  Requested agent context: %s tokens\n' "$CONTEXT"
+        printf '  VS Code alias: %s (created/recreated after confirmation)\n' "$LOCAL_MODEL"
+    fi
+    confirm "Proceed with $MODEL at $CONTEXT context" || fail "Model acquisition cancelled."
+    if [ "$source" = 1 ]; then
+        if [ "$installed" = true ]; then
+            printf 'Using the already-installed model; no download or update was performed.\n'
+        else
+            "$OLLAMA" pull "$MODEL" || fail "Download failed. Check the tag, disk space, and network, then rerun."
+        fi
     else
         printf 'FROM "%s"\n' "$import_path" > "$WORK/Modelfile"
         "$OLLAMA" create "$MODEL" -f "$WORK/Modelfile" || fail "Import failed. Verify architecture, file completeness and Ollama compatibility."
     fi
     # Give VS Code a distinct locally configured model with the selected budget.
-    "$JQ" -n --arg model "$MODEL" '{model:$model}' > "$WORK/show-request.json"
-    api show -H 'Content-Type: application/json' --data-binary "@$WORK/show-request.json" > "$WORK/show.json"
-    "$JQ" -e '(.remote_host // "") == "" and (.remote_model // "") == ""' "$WORK/show.json" >/dev/null ||
-        fail "This model routes to cloud inference; choose a local weights model."
-    local limit
-    limit=$("$JQ" '[.details.context_length,
-        (.model_info as $info | $info[($info["general.architecture"] // "") + ".context_length"])]
-        | map(select(type == "number" and . > 0)) | min // 0' "$WORK/show.json")
-    if [ "$limit" -gt 0 ] && [ "$CONTEXT" -gt "$limit" ]; then
-        fail "This model advertises $limit context tokens, below the requested $CONTEXT. Ask Gemini for 65536+ support; downloaded files are preserved."
-    fi
-    [ "$limit" -gt 0 ] || printf 'WARNING: Supported context limit unknown. Verify 65536+ support on the exact model page.\n'
-    "$JQ" -e '(.capabilities // []) | index("tools") != null' "$WORK/show.json" >/dev/null ||
-        fail "Model does not advertise tools. Choose a tool-capable model; do not force-enable unsupported tools."
-    LOCAL_MODEL="local-ai-${MODEL//:/-}"
+    fetch_local_model_metadata
+    validate_local_model_metadata
     printf 'FROM %s\nPARAMETER num_ctx %s\n' "$MODEL" "$CONTEXT" > "$WORK/Modelfile"
     "$OLLAMA" create "$LOCAL_MODEL" -f "$WORK/Modelfile"
 }
 check_model() {
     "$JQ" -n --arg model "$LOCAL_MODEL" --argjson context "$CONTEXT" '{
-        model:$model, stream:false, options:{num_ctx:$context,num_predict:256,temperature:0},
+        model:$model, stream:false, options:{num_ctx:$context,num_predict:1024,temperature:0},
         messages:[{role:"user",content:"What is the temperature in New York?"}],
         tools:[{type:"function",function:{name:"get_temperature",
           description:"Get the current temperature for a city",
