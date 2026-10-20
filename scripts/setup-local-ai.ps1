@@ -243,9 +243,8 @@ extra dedicated VRAM, or a guaranteed driver/Ollama allocation.
 Installed capacity and Windows-visible memory are DIFFERENT measurements.
 Do not relabel Windows-visible memory as installed capacity. If they differ,
 the cause is unknown here; do not infer that the difference is GPU-reserved or
-currently available to the model. Do not assume installing 96 GiB means all
-96 GiB is presently usable by Windows or Ollama. Reconcile visible-memory and
-actual driver/runtime limits before claiming a model fits.
+currently available to the model. Do not assume all installed RAM is presently usable by Windows or Ollama.
+Reconcile visible-memory and actual driver/runtime limits before claiming a model fits.
 Do not infer a BIOS carve-out or fixed GPU allocation from the GPU model name.
 Do not add shared GPU memory to RAM or subtract it as a permanently reserved pool.
 Budget model weights, KV cache at 65536+ context, runtime overhead and OS/editor
@@ -277,6 +276,10 @@ Require evidence of structured Ollama API tool_calls for the exact recommended
 variant/template, not just coding benchmarks, a tools label, or JSON in chat text.
 If exact-variant tool behavior is unverified, state that prominently after the
 copy-back block; do not promise VS Code Agent compatibility.
+Treat DOWNLOAD_GIB as an estimate only. The wizard independently checks the exact
+tag's registry layers and GGUF context metadata before any Ollama Library download.
+Do not infer an exact tag's context from family-level claims, a different quantization,
+or a model card alone. Cite the exact Ollama tag page and the source for context claims.
 MANDATORY FOR THIS SETUP: We need at least 65536 tokens of context for the
 VS Code Ollama extension. Recommend only models whose supported context window
 is at least 65536 AND whose weights plus KV cache at that context fit this
@@ -301,21 +304,176 @@ State uncertainties and ask about missing hardware details instead of guessing.
 function Test-ModelName([string]$Name) {
     return $Name -cmatch '^[a-zA-Z0-9][a-zA-Z0-9._-]*(:[a-zA-Z0-9][a-zA-Z0-9._-]*)?$' -and $Name -notmatch 'cloud'
 }
+function Get-CanonicalModelName([string]$Name) {
+    if ($Name.Contains(':')) { return $Name }
+    return "${Name}:latest"
+}
+function Test-ModelInstalled([string]$Name) {
+    $wanted = Get-CanonicalModelName $Name
+    $rows = @(& $script:Ollama list)
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot list installed Ollama models.' }
+    foreach ($row in $rows) {
+        $columns = @(([string]$row).Trim() -split '\s+')
+        if ($columns.Count -gt 0 -and $columns[0] -ieq $wanted) { return $true }
+    }
+    return $false
+}
+function Get-HttpsBytes([string]$Uri, [string]$Accept = '', [int]$RangeEnd = -1) {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    $parsed = [uri]$Uri
+    if ($parsed.Scheme -ne 'https' -or $parsed.Host -ne 'registry.ollama.ai') {
+        throw 'Registry metadata must come from registry.ollama.ai over HTTPS.'
+    }
+    $request = New-DownloadRequest $parsed
+    if ($Accept) { $request.Accept = $Accept }
+    if ($RangeEnd -ge 0) { $request.AddRange(0, $RangeEnd) }
+    $response = $request.GetResponse()
+    try {
+        if ($RangeEnd -ge 0 -and
+            ([int]$response.StatusCode -ne 206 -or $response.ContentLength -lt 0 -or $response.ContentLength -gt ($RangeEnd + 1))) {
+            throw 'Registry did not honor the bounded GGUF metadata request.'
+        }
+        $stream = $response.GetResponseStream()
+        try {
+            $memory = [IO.MemoryStream]::new()
+            try {
+                $stream.CopyTo($memory)
+                return ,$memory.ToArray()
+            } finally { $memory.Dispose() }
+        } finally { $stream.Dispose() }
+    } finally { $response.Dispose() }
+}
+function Read-GgufUInt32([byte[]]$Bytes, [ref]$Offset) {
+    if ($Offset.Value -lt 0 -or $Offset.Value + 4 -gt $Bytes.Length) { throw 'GGUF metadata is incomplete.' }
+    $value = [BitConverter]::ToUInt32($Bytes, $Offset.Value)
+    $Offset.Value += 4
+    return [uint64]$value
+}
+function Read-GgufUInt64([byte[]]$Bytes, [ref]$Offset) {
+    if ($Offset.Value -lt 0 -or $Offset.Value + 8 -gt $Bytes.Length) { throw 'GGUF metadata is incomplete.' }
+    $value = [BitConverter]::ToUInt64($Bytes, $Offset.Value)
+    $Offset.Value += 8
+    return $value
+}
+function Read-GgufString([byte[]]$Bytes, [ref]$Offset) {
+    $length = Read-GgufUInt64 $Bytes $Offset
+    if ($length -gt [int]::MaxValue -or $Offset.Value + [int]$length -gt $Bytes.Length) { throw 'GGUF metadata is incomplete.' }
+    $value = [Text.Encoding]::UTF8.GetString($Bytes, $Offset.Value, [int]$length)
+    $Offset.Value += [int]$length
+    return $value
+}
+function Skip-GgufValue([byte[]]$Bytes, [ref]$Offset, [uint32]$Type) {
+    $sizes = @{ 0 = 1; 1 = 1; 2 = 2; 3 = 2; 4 = 4; 5 = 4; 6 = 4; 7 = 1; 10 = 8; 11 = 8; 12 = 8 }
+    if ($sizes.ContainsKey([int]$Type)) {
+        $Offset.Value += $sizes[[int]$Type]
+        if ($Offset.Value -gt $Bytes.Length) { throw 'GGUF metadata is incomplete.' }
+        return
+    }
+    if ($Type -eq 8) {
+        [void](Read-GgufString $Bytes $Offset)
+        return
+    }
+    if ($Type -eq 9) {
+        $elementType = [uint32](Read-GgufUInt32 $Bytes $Offset)
+        $count = Read-GgufUInt64 $Bytes $Offset
+        if ($sizes.ContainsKey([int]$elementType)) {
+            $skip = $count * $sizes[[int]$elementType]
+            if ($skip -gt [int]::MaxValue -or $Offset.Value + [int]$skip -gt $Bytes.Length) { throw 'GGUF metadata is incomplete.' }
+            $Offset.Value += [int]$skip
+            return
+        }
+        if ($elementType -eq 8) {
+            for ($i = 0; $i -lt $count; $i++) { [void](Read-GgufString $Bytes $Offset) }
+            return
+        }
+    }
+    throw "Unsupported GGUF metadata type $Type."
+}
+function Get-GgufContextLength([byte[]]$Bytes) {
+    if ($Bytes.Length -lt 24 -or [Text.Encoding]::ASCII.GetString($Bytes, 0, 4) -cne 'GGUF') {
+        throw 'The model data is not a GGUF.'
+    }
+    $offsetValue = 4
+    $offset = [ref]$offsetValue
+    $version = Read-GgufUInt32 $Bytes $offset
+    if ($version -lt 2 -or $version -gt 3) { throw "Unsupported GGUF version $version." }
+    [void](Read-GgufUInt64 $Bytes $offset)
+    $metadataCount = Read-GgufUInt64 $Bytes $offset
+    for ($i = 0; $i -lt $metadataCount; $i++) {
+        $key = Read-GgufString $Bytes $offset
+        $type = [uint32](Read-GgufUInt32 $Bytes $offset)
+        if ($key -match '\.context_length$') {
+            if ($type -eq 4) { return [long](Read-GgufUInt32 $Bytes $offset) }
+            if ($type -eq 10) { return [long](Read-GgufUInt64 $Bytes $offset) }
+            throw "GGUF context length has unsupported metadata type $type."
+        }
+        Skip-GgufValue $Bytes $offset $type
+    }
+    return $null
+}
+function Get-RemoteOllamaModelInfo([string]$Name) {
+    $canonical = Get-CanonicalModelName $Name
+    $parts = $canonical.Split(':', 2)
+    $manifestUri = "https://registry.ollama.ai/v2/library/$($parts[0])/manifests/$($parts[1])"
+    try {
+        $manifestBytes = Get-HttpsBytes $manifestUri 'application/vnd.docker.distribution.manifest.v2+json'
+        $manifest = [Text.Encoding]::UTF8.GetString($manifestBytes) | ConvertFrom-Json
+        $layers = @($manifest.layers)
+        $modelLayer = @($layers | Where-Object { $_.mediaType -eq 'application/vnd.ollama.image.model' })
+        if ($modelLayer.Count -ne 1 -or $modelLayer[0].digest -notmatch '^sha256:[0-9a-f]{64}$') {
+            throw 'Registry manifest did not contain one local model layer.'
+        }
+        $downloadBytes = ($layers | Measure-Object -Property size -Sum).Sum
+        if ($null -eq $downloadBytes -or [long]$downloadBytes -le 0) { throw 'Registry manifest did not report a download size.' }
+        $blobUri = "https://registry.ollama.ai/v2/library/$($parts[0])/blobs/$($modelLayer[0].digest)"
+        $prefix = Get-HttpsBytes $blobUri 'application/octet-stream' 1048575
+        $context = Get-GgufContextLength $prefix
+        if ($null -eq $context -or $context -le 0) { throw 'Registry GGUF metadata did not report a context length.' }
+        return [pscustomobject]@{
+            Model = $canonical
+            DownloadBytes = [long]$downloadBytes
+            ContextLength = [long]$context
+        }
+    } catch {
+        throw "Could not safely verify exact tag $canonical before download: $($_.Exception.Message) No model was downloaded."
+    }
+}
+function Get-ModelContextLimit($Metadata) {
+    $limits = @()
+    if ($Metadata.PSObject.Properties['details'] -and $Metadata.details.PSObject.Properties['context_length']) {
+        $limits += [long]$Metadata.details.context_length
+    }
+    if ($Metadata.PSObject.Properties['model_info']) {
+        $architecture = $Metadata.model_info.PSObject.Properties['general.architecture']
+        if ($architecture) {
+            $contextLimit = $Metadata.model_info.PSObject.Properties["$($architecture.Value).context_length"]
+            if ($contextLimit) { $limits += [long]$contextLimit.Value }
+        }
+    }
+    return $limits | Where-Object { $_ -gt 0 } | Sort-Object | Select-Object -First 1
+}
+function Assert-LocalModelCompatible($Metadata, [int]$Context) {
+    foreach ($field in @('remote_host', 'remote_model')) {
+        if ($Metadata.PSObject.Properties[$field] -and $Metadata.$field) { throw 'This model routes to cloud inference. Choose local model weights.' }
+    }
+    $limit = Get-ModelContextLimit $Metadata
+    if ($null -ne $limit -and $Context -gt $limit) {
+        throw "This model advertises a $limit-token context window, below the requested $Context. Choose an exact tag supporting at least 65536."
+    }
+    if ($null -eq $limit) { Write-Warning 'Ollama did not report a supported context limit after acquisition.' }
+    if (-not $Metadata.PSObject.Properties['capabilities'] -or @($Metadata.capabilities) -notcontains 'tools') {
+        throw 'Model does not advertise tool calling. Choose a tool-capable model.'
+    }
+    return $limit
+}
 function Select-LocalModel {
     Write-Host "`nChoose a small, tool-capable model from https://ollama.com/library to run on this computer."
-    Write-Host 'Use the Gemini recommendation to check that it fits your memory and supports Agent tools.'
-    Write-Host 'Download it in Ollama Desktop:'
-    Write-Host '  1. Open Ollama from the Start menu.'
-    Write-Host '  2. Click the model selector and type the exact name Gemini recommended, including any size tag like :32b.'
-    Write-Host '     Keep the exact tag Gemini gave you; a size tag alone does not establish tool or 65536-context support.'
-    Write-Host '  3. Select the matching LOCAL model and click its download icon if shown. Do not choose a cloud model.'
-    Write-Host '  4. In the message box, type "Say hello" and press Enter. If needed, Ollama downloads the model before replying.'
-    Write-Host '  5. Wait for the download to finish and a reply to appear. Return here and enter that same model name.'
-    Write-Host 'Prefer to stay here? Enter the model name below and the wizard can download it instead.'
-    Write-Host 'If already downloaded in Desktop, the wizard checks/reuses those files; it does not download an extra copy.'
-    Write-Host 'Choose local model weights, not a cloud model. The download may be several GB.'
+    Write-Host 'Gemini is advisory. Before downloading, this wizard checks the exact Ollama tag, registry size, and GGUF context metadata.'
+    Write-Host 'If the model is already installed, it is checked and reused without pulling it again.'
     $source = Read-Choice 'Model source: 1 = Ollama Library (recommended), 2 = import a downloaded Hugging Face GGUF'
     $gguf = $null
+    $installed = $false
+    $remoteInfo = $null
     switch ($source) {
         '1' { $script:Model = Read-Choice 'MODEL: paste the exact model name and tag from Gemini (without "ollama run")' }
         '2' {
@@ -335,52 +493,85 @@ function Select-LocalModel {
     }
     if ($script:Model -eq 'NONE') { throw 'Gemini found no suitable local model for this hardware at 65536+ context. Review its explanation; do not download an unsuitable model.' }
     if (-not (Test-ModelName $script:Model)) { throw 'Use a simple model[:tag], not a command, URL, namespace or cloud model.' }
-    $sizeText = Read-Choice 'DOWNLOAD_GIB: paste the storage estimate from Gemini (number only; Enter if unknown; include an extra copy for GGUF import)'
+    $sizeText = Read-Choice 'DOWNLOAD_GIB: paste Gemini''s estimate (number only; Enter if unknown; verified registry/file size overrides it)'
     $size = 0.0
     if ($sizeText) {
         if ($sizeText -notmatch '^[0-9]+(\.[0-9]+)?$') { throw 'Size must be numeric GiB.' }
         $size = [double]::Parse($sizeText, [Globalization.CultureInfo]::InvariantCulture)
-    } else { Write-Warning 'Download size unknown. Check the model page against available disk space.' }
-    if ((Get-ModelVolume).AvailableFreeSpace -lt (($size + 2) * 1GB)) { throw 'Not enough model-volume space (allowing 2 GiB spare). Free space or choose a smaller model.' }
+    }
     $contextText = Read-Choice 'CONTEXT_TOKENS: paste the context from Gemini (minimum 65536; Enter for 65536)'
     if (-not $contextText) { $contextText = '65536' }
     if ($contextText -notmatch '^[0-9]{1,7}$' -or [int]$contextText -lt 65536 -or [int]$contextText -gt 1048576) {
         throw 'Choose an integer context size from 65536 to 1048576. This VS Code setup requires at least 65536; ask Gemini for a compatible model rather than reducing context.'
     }
     $script:Context = [int]$contextText
-    if (-not (Confirm-Step "Acquire $script:Model with context ${script:Context}? Large downloads; existing models with this name may be updated/replaced")) { throw 'Model acquisition cancelled.' }
+    $script:LocalModel = 'local-ai-' + $script:Model.Replace(':', '-')
     $modelfile = Join-Path $script:Work 'Modelfile'
     if ($source -eq '1') {
-        Invoke-Native $script:Ollama @('pull', $script:Model)
+        $installed = Test-ModelInstalled $script:Model
+        if ($installed) {
+            $metadata = Invoke-OllamaApi 'show' @{ model = $script:Model }
+            $limit = Assert-LocalModelCompatible $metadata $script:Context
+            Write-Host "`nVerified review:" -ForegroundColor Cyan
+            Write-Host "  Exact model: $(Get-CanonicalModelName $script:Model)"
+            Write-Host '  Download: already installed; no pull needed'
+            Write-Host "  Reported context: $(if ($null -eq $limit) { 'unknown after local check' } else { "$limit tokens" })"
+            Write-Host "  VS Code alias: $script:LocalModel (created/recreated after confirmation)"
+            Write-Host '  Tools: advertised locally; structured tool use is tested next'
+        } else {
+            $remoteInfo = Get-RemoteOllamaModelInfo $script:Model
+            if ($remoteInfo.ContextLength -lt $script:Context) {
+                throw "Exact tag $($remoteInfo.Model) advertises $($remoteInfo.ContextLength) context tokens, below the requested $script:Context. No model was downloaded."
+            }
+            $size = $remoteInfo.DownloadBytes / 1GB
+            if ((Get-ModelVolume).AvailableFreeSpace -lt ($remoteInfo.DownloadBytes + 2GB)) {
+                throw "Not enough model-volume space for the verified $(Format-DownloadSize $remoteInfo.DownloadBytes) download plus 2 GiB spare. No model was downloaded."
+            }
+            Write-Host "`nVerified review:" -ForegroundColor Cyan
+            Write-Host "  Exact model: $($remoteInfo.Model)"
+            Write-Host "  Registry download: $(Format-DownloadSize $remoteInfo.DownloadBytes)"
+            Write-Host "  GGUF context limit: $($remoteInfo.ContextLength) tokens"
+            Write-Host "  Requested agent context: $script:Context tokens"
+            Write-Host "  Free model-volume space: $(Format-DownloadSize (Get-ModelVolume).AvailableFreeSpace)"
+            Write-Host "  VS Code alias: $script:LocalModel (created/recreated after confirmation)"
+            Write-Host '  Tools: not trusted yet; checked from local metadata and a live tool call after download'
+            if ($sizeText -and [math]::Abs(([double]::Parse($sizeText, [Globalization.CultureInfo]::InvariantCulture)) - $size) -gt 0.5) {
+                Write-Warning "Gemini estimated $sizeText GiB; the exact registry layers total $([math]::Round($size, 1)) GiB. The registry value is used."
+            }
+        }
+    } else {
+        $prefixLength = [int][math]::Min(1MB, (Get-Item -LiteralPath $gguf).Length)
+        $stream = [IO.File]::OpenRead($gguf)
+        try {
+            $prefix = New-Object byte[] $prefixLength
+            [void]$stream.Read($prefix, 0, $prefixLength)
+        } finally { $stream.Dispose() }
+        try { $ggufLimit = Get-GgufContextLength $prefix } catch { $ggufLimit = $null }
+        if ($null -ne $ggufLimit -and $ggufLimit -lt $script:Context) {
+            throw "This GGUF advertises $ggufLimit context tokens, below the requested $script:Context."
+        }
+        $ggufBytes = (Get-Item -LiteralPath $gguf).Length
+        if ((Get-ModelVolume).AvailableFreeSpace -lt ($ggufBytes + 2GB)) {
+            throw 'Not enough model-volume space for another GGUF-sized copy plus 2 GiB spare.'
+        }
+        Write-Host "`nReview:" -ForegroundColor Cyan
+        Write-Host "  Import name: $(Get-CanonicalModelName $script:Model)"
+        Write-Host "  GGUF file: $([math]::Round($ggufBytes / 1GB, 1)) GiB"
+        Write-Host "  GGUF context: $(if ($null -eq $ggufLimit) { 'not found; Ollama will recheck after import' } else { "$ggufLimit tokens" })"
+        Write-Host "  Requested agent context: $script:Context tokens"
+        Write-Host "  VS Code alias: $script:LocalModel (created/recreated after confirmation)"
+    }
+    if (-not (Confirm-Step "Proceed with $script:Model at $script:Context context")) { throw 'Model acquisition cancelled.' }
+    if ($source -eq '1') {
+        if ($installed) { Write-Host 'Using the already-installed model; no download or update was performed.' -ForegroundColor Green }
+        else { Invoke-Native $script:Ollama @('pull', $script:Model) }
     } else {
         $escaped = $gguf.Replace('\', '\\').Replace('"', '\"')
         [IO.File]::WriteAllText($modelfile, "FROM `"$escaped`"`n")
         Invoke-Native $script:Ollama @('create', $script:Model, '-f', $modelfile)
     }
     $metadata = Invoke-OllamaApi 'show' @{ model = $script:Model }
-    foreach ($field in @('remote_host', 'remote_model')) {
-        if ($metadata.PSObject.Properties[$field] -and $metadata.$field) { throw 'This model routes to cloud inference. Choose local model weights.' }
-    }
-    $limits = @()
-    if ($metadata.PSObject.Properties['details'] -and $metadata.details.PSObject.Properties['context_length']) {
-        $limits += [long]$metadata.details.context_length
-    }
-    if ($metadata.PSObject.Properties['model_info']) {
-        $architecture = $metadata.model_info.PSObject.Properties['general.architecture']
-        if ($architecture) {
-            $contextLimit = $metadata.model_info.PSObject.Properties["$($architecture.Value).context_length"]
-            if ($contextLimit) { $limits += [long]$contextLimit.Value }
-        }
-    }
-    $limit = $limits | Where-Object { $_ -gt 0 } | Sort-Object | Select-Object -First 1
-    if ($null -ne $limit -and $script:Context -gt $limit) {
-        throw "This model advertises a $limit-token context window, below the requested $script:Context. Ask Gemini for a model supporting at least 65536; the downloaded files are preserved."
-    }
-    if ($null -eq $limit) { Write-Warning 'Ollama did not report a supported context limit. Verify 65536+ support on the exact model page before relying on this setup.' }
-    if (-not $metadata.PSObject.Properties['capabilities'] -or @($metadata.capabilities) -notcontains 'tools') {
-        throw 'Model does not advertise tool calling. Choose a tool-capable model.'
-    }
-    $script:LocalModel = 'local-ai-' + $script:Model.Replace(':', '-')
+    [void](Assert-LocalModelCompatible $metadata $script:Context)
     [IO.File]::WriteAllText($modelfile, "FROM $script:Model`nPARAMETER num_ctx $script:Context`n")
     Invoke-Native $script:Ollama @('create', $script:LocalModel, '-f', $modelfile)
 }

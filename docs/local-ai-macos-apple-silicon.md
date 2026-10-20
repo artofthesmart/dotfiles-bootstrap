@@ -31,12 +31,12 @@ bash ./scripts/setup-local-ai.sh
    tool-capable local coding model, an exact Ollama Library tag, download link,
    size, context budget, and smaller fallback. Return with the recommendation;
    advice is a starting point, not a guarantee of an optimal model.
-3. **Download in Ollama.** Open Ollama from Applications. Click the model
-   selector; type Gemini's exact name including its size tag (such as `:32b`).
-   Select the local model, click its download icon if shown, type **Say hello**
-   and press Enter. Wait for a reply. Return to the wizard with that same name,
-   storage estimate and context budget. It reuses downloaded files and checks
-   tools. Alternatively, let the wizard download it.
+3. **Verify and download.** Paste Gemini's model, size estimate and context into
+   the wizard. Before a large pull, it checks the exact registry tag, actual
+   layer size, GGUF context limit and free disk, then shows a final review.
+   A known 32K tag is rejected before download. Already-installed models are
+   reused without updating. The downloaded model also appears in Ollama.
+   The wizard checks advertised tools and a harmless structured tool call.
 4. **Open your repository.** The wizard installs official Chat/Ollama extensions
    into a separate **Local AI** profile and opens your existing checkout.
    Follow its final instructions: select **Agent**, explicitly choose your

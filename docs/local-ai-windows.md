@@ -34,16 +34,14 @@ override managed controls.
    local model, exact Ollama name and link, storage size, context budget
    and smaller fallback. The prompt is saved in **Documents/Local-AI-Gemini-Prompt.txt**.
    A recommendation is not a performance guarantee.
-3. **Download in Ollama Desktop.** Open Ollama from Start. Click the model
-   selector and type Gemini's exact recommended name, including its size tag
-   (such as `:7b`; use Gemini's exact tag). Select the
-   matching **local**, not cloud, model. Click its download icon if shown.
-   Type **Say hello** in the message box and press Enter; Ollama downloads
-   the model if needed. Wait for a reply, then return to the wizard and enter
-   the same name, storage estimate and context budget.
-   Alternatively, enter the name directly in the wizard to download there.
-   Existing model files are reused. The wizard checks tools and creates a
-   `local-ai-...` context-budget copy.
+3. **Let the wizard verify and download it.** Paste Gemini's three top lines in
+   order: exact model tag, estimated size and context. Before any large pull,
+   the wizard checks the exact Ollama registry tag, actual layer size and GGUF
+   context limit. It rejects a 32K model before downloading it, checks free
+   disk, and shows a final review. Installed models are reused without updating.
+   After download, the model appears in Ollama Desktop automatically. The wizard
+   then checks advertised tools, runs a harmless structured tool-call test, and
+   creates a `local-ai-...` model fixed to your chosen context.
 4. **Open your checkout.** Official Chat/Ollama extensions go into a separate
    **Local AI** profile. Follow the final UI steps: select **Agent**, choose
    your local Ollama model explicitly, and select local utility models in

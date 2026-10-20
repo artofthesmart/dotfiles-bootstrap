@@ -43,8 +43,9 @@ to user profiles. The Bash full-flow test uses a terminal fixture and a fake
 loopback Ollama server on a dynamically assigned port.
 
 Coverage includes model input validation, cancellation, GGUF validation,
-context-budget aliases, storage limits, explicit download/HTTP/tool failures,
-cloud metadata rejection, hardware field allowlisting and profile-scoped
+exact-tag registry preflight, pre-download context rejection, installed-model
+reuse, context-budget aliases, storage limits, explicit download/HTTP/tool
+failures, cloud metadata rejection, hardware field allowlisting and profile-scoped
 commands. Bash also covers translated Macs, Intel warnings, unsupported
 OS/architecture, old VS Code, failed elevation, existing apps outside PATH,
 repeated runs and preservation of default settings.
@@ -81,10 +82,12 @@ For each platform, exercise these steps:
    `CONTEXT_TOKENS` first, matching the wizard's questions. Context must be at
    least 65536 and fit hardware with model weights plus KV cache and OS headroom.
    Distinguish structured tool-call evidence from coding benchmarks or JSON prose.
-3. Pull a real local tool-capable model. Try a compatible single-file GGUF
-   import with a space-containing path and an incompatible model. Confirm
-   advertised tools **and** actual expected tool-call output are checked.
-   Confirm cloud tags/metadata are rejected.
+3. Preflight a compatible tag and a known 32K tag. Confirm exact registry layer
+   size and GGUF context are shown before confirmation, and that the 32K tag is
+   rejected before `ollama pull`. Pull a real tool-capable model. Try a
+   space-containing GGUF import and an incompatible model. Confirm advertised
+   tools **and** actual expected tool-call output are checked. Confirm cloud
+   tags/metadata are rejected.
 4. Exercise low space, failed download, unavailable server, memory exhaustion
    and timeout. No failure should print a successful check or silently choose
    a cloud model.
@@ -97,8 +100,9 @@ For each platform, exercise these steps:
 7. Switch to the previous profile and a cloud model, then back to Local AI
    and Ollama. Confirm the active model each time; profiles do not enforce
    billing boundaries.
-8. Rerun: confirm applications are reused, model replacement is disclosed,
-   and default-profile settings remain unchanged.
+8. Rerun: confirm applications and the exact installed model are reused without
+   an update pull, while the context alias is recreated only after confirmation.
+   Confirm default-profile settings remain unchanged.
 
 ## Scope and recovery
 
@@ -123,11 +127,15 @@ For each platform, exercise these steps:
   Live diagnosis on the installed Nemo 12B showed the old synthetic request
   returning JSON prose while the documented example produced structured calls.
   This establishes basic tool calling, not full VS Code Agent reliability.
-- **Storage:** the wizard asks about the running server's model directory.
+- **Storage and exact-tag preflight:** the wizard asks about the running server's model directory.
   `OLLAMA_MODELS` in a terminal does not necessarily configure a separately
   running service. Supply that service's actual storage directory for disk
-  checks. Unknown download sizes are explicitly warned about; leave space for
-  the OS, caches and temporary/imported copies too.
+  checks. For Ollama Library models, Gemini's size is advisory: the wizard reads
+  the exact tag's registry manifest and uses the actual layer total for the disk
+  check. It also range-reads only the first MiB of the GGUF layer to inspect
+  context metadata before a multi-gigabyte pull. If registry or context metadata
+  cannot be verified, it stops without downloading. Leave space for the OS,
+  caches and temporary/imported copies too.
 - **Model choice:** the Gemini prompt is advice, not a benchmark. Some models
   advertise tools but fail the smoke test or perform poorly as agents. Try
   the fallback or a different tool-capable template. GGUF magic validation
@@ -137,16 +145,17 @@ For each platform, exercise these steps:
   guarantee. The official extension recommends at least 65536 tokens; this
   workflow treats that as its minimum requirement. Smaller input is rejected,
   not silently accepted with a warning. Larger context increases memory use.
-  Models advertising a smaller supported limit are rejected before alias creation;
-  unknown limits produce an explicit verification warning. Setting `num_ctx`
-  beyond a model's supported window does not prove extended-context support.
-  Existing aliases can be replaced after confirmation;
-  source weights are reused rather than downloaded again for the alias.
+  Ollama Library tags advertising a smaller supported limit are rejected before
+  download. Local metadata is checked again after acquisition; an unknown local
+  limit produces an explicit warning. Setting `num_ctx` beyond a model's
+  supported window does not prove extended-context support. Exact installed
+  source models are reused without a pull/update. Existing aliases can be
+  replaced after confirmation; source weights are reused for the alias.
   If nothing fits at 65536+, Gemini must return `MODEL: NONE` and explain why,
   rather than recommending a 32K model or lowering the context. Entering NONE
   stops the wizard with that explanation instead of trying to download it.
-- **Slow/no response:** the smoke test allows 180 seconds. Windows allows 1024
-  output tokens initially; Bash currently allows 256. A slow/reasoning model
+- **Slow/no response:** the smoke test allows 180 seconds. Both wizards allow 1024
+  output tokens initially. A slow/reasoning model
   may exhaust this budget without returning a tool call. Windows reports the
   model and stop reason, offers a 2048-token retry, or explicitly allows
   continuing to VS Code with tool use **UNVERIFIED**. This is not a passed

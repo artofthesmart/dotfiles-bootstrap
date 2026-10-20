@@ -69,7 +69,7 @@ class OllamaFixture(http.server.BaseHTTPRequestHandler):
 
 
 STUB = r'''#!/usr/bin/python3
-import json, os, pathlib, subprocess, sys
+import json, os, pathlib, struct, subprocess, sys
 name = pathlib.Path(sys.argv[0]).name
 args = sys.argv[1:]
 with open(os.environ["CALL_LOG"], "a") as log:
@@ -86,7 +86,12 @@ elif name == "code":
 elif name == "ollama":
     if os.environ.get("FAIL_OLLAMA") == args[0]:
         sys.exit(1)
-    print("fixture Ollama output")
+    if args and args[0] == "list":
+        print("NAME ID SIZE MODIFIED")
+        if os.environ.get("INSTALLED_MODEL"):
+            print(os.environ["INSTALLED_MODEL"] + " abc123 4 GB now")
+    else:
+        print("fixture Ollama output")
 elif name == "nvidia-smi":
     if os.environ.get("FAIL_NVIDIA"):
         sys.exit(1)
@@ -95,6 +100,21 @@ elif name == "df":
     print("Filesystem 1024-blocks Used Available Capacity Mounted")
     print("/dev/fixture 100000000 1 " + os.environ.get("FREE_KIB", "90000000") + " 1% /")
 elif name == "curl":
+    url = next((arg for arg in args if arg.startswith("https://registry.ollama.ai/")), "")
+    if url:
+        if os.environ.get("FAIL_REGISTRY"):
+            sys.exit(22)
+        output = pathlib.Path(args[args.index("-o") + 1])
+        if "/manifests/" in url:
+            size = int(os.environ.get("REGISTRY_BYTES", str(4 * 1024**3)))
+            output.write_text(json.dumps({"schemaVersion": 2, "layers": [
+                {"mediaType": "application/vnd.ollama.image.model",
+                 "digest": "sha256:" + "a" * 64, "size": size}
+            ]}))
+        else:
+            context = int(os.environ.get("REGISTRY_CONTEXT", "131072"))
+            output.write_bytes(b"GGUFfixture.qwen2.context_length" + struct.pack("<I", 4) + struct.pack("<I", context))
+        sys.exit(0)
     for i, arg in enumerate(args):
         if arg.startswith("http://127.0.0.1:11434/"):
             if os.environ.get("FAIL_CHAT") and arg.endswith("/chat"):
@@ -192,8 +212,8 @@ class WizardTests(unittest.TestCase):
         self.assertEqual(chat["options"]["num_ctx"], 65536)
         self.assertIn("tool-call check passed", result.stdout)
         self.assertIn("https://ollama.com/library", result.stdout)
-        self.assertIn("enter the exact model name and size tag", result.stdout)
-        self.assertIn("wizard checks/reuses those files", result.stdout)
+        self.assertIn("Verified review", result.stdout)
+        self.assertIn("GGUF context limit: 131072", result.stdout)
         self.assertIn("PARAMETER num_ctx 65536", (self.base / "work/Modelfile").read_text())
         positions = [result.stdout.index(label + ":") for label in ("MODEL", "DOWNLOAD_GIB", "CONTEXT_TOKENS")]
         self.assertEqual(positions, sorted(positions))
@@ -216,10 +236,10 @@ class WizardTests(unittest.TestCase):
 
     def test_low_disk_rejected_before_download(self):
         self.env["FREE_KIB"] = "1048576"
-        result = self.run_shell("choose_model", "1\nmodel\n4\n")
+        result = self.run_shell("choose_model", "1\nmodel\n4\n\n")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Not enough", result.stderr)
-        self.assertEqual(self.calls("ollama"), [])
+        self.assertFalse(any(row[1] == "pull" for row in self.calls("ollama")))
 
     def test_cancel_and_eof_do_not_download(self):
         for answers in ["q\n", ""]:
@@ -244,21 +264,39 @@ class WizardTests(unittest.TestCase):
             self.assertIn("65536", result.stderr)
         self.assertEqual(self.calls("ollama"), [])
         for mode in ("short-context", "info-context"):
-            self.server.mode = mode
+            self.env["REGISTRY_CONTEXT"] = "32768"
             result = self.run_shell("choose_model", "1\nmodel\n1\n\ny\n")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("32768", result.stderr)
+            self.assertFalse(any(row[1] == "pull" for row in self.calls("ollama")))
             self.assertFalse(any(row[1] == "create" for row in self.calls("ollama")))
+            self.env.pop("REGISTRY_CONTEXT")
+            self.server.mode = mode
         self.server.mode = "unknown-context"
         result = self.run_shell("choose_model", "1\nmodel\n1\n\ny\n")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Supported context limit unknown", result.stdout)
+        self.assertIn("did not report a supported context limit", result.stdout)
 
     def test_no_suitable_recommendation_stops_before_download(self):
         result = self.run_shell("choose_model", "1\nNONE\n")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("no suitable model", result.stderr)
         self.assertEqual(self.calls("ollama"), [])
+
+    def test_registry_failure_stops_before_pull(self):
+        self.env["FAIL_REGISTRY"] = "1"
+        result = self.run_shell("choose_model", "1\nmodel\n1\n\n")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("No model was downloaded", result.stderr)
+        self.assertFalse(any(row[1] == "pull" for row in self.calls("ollama")))
+
+    def test_installed_exact_model_is_reused_without_pull(self):
+        self.env["INSTALLED_MODEL"] = "model:q4"
+        result = self.run_shell("choose_model", "1\nmodel:q4\n4\n\ny\n")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("already-installed model", result.stdout)
+        self.assertFalse(any(row[1] == "pull" for row in self.calls("ollama")))
+        self.assertTrue(any(row[1] == "create" and row[2] == "local-ai-model-q4" for row in self.calls("ollama")))
 
     def test_remote_and_non_tool_models_rejected(self):
         for mode, message in [("remote", "cloud inference"), ("no-tools", "advertise tools")]:
@@ -272,11 +310,11 @@ class WizardTests(unittest.TestCase):
         for mode in ["no-call", "wrong-call", "json-prose", "malformed", "http-error"]:
             with self.subTest(mode=mode):
                 self.server.mode = mode
-                result = self.run_shell('LOCAL_MODEL=model; CONTEXT=8192; check_model')
+                result = self.run_shell('LOCAL_MODEL=model; CONTEXT=65536; check_model')
                 self.assertNotEqual(result.returncode, 0)
                 self.assertNotIn("check passed", result.stdout)
         self.env["FAIL_CHAT"] = "1"
-        result = self.run_shell('LOCAL_MODEL=model; CONTEXT=8192; check_model')
+        result = self.run_shell('LOCAL_MODEL=model; CONTEXT=65536; check_model')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("timed out", result.stderr)
 
@@ -320,14 +358,13 @@ class WizardTests(unittest.TestCase):
         result = self.run_shell('detect_platform; printf "%s" "$ARCH"')
         self.assertEqual(result.stdout, "arm64")
         self.env["APPLE_SILICON"] = "0"
-        result = self.run_shell("detect_platform; hardware_prompt", "\nn\n\n")
+        result = self.run_shell("detect_platform; hardware_prompt", "n\n\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("CPU-only", result.stdout)
         self.assertEqual(self.run_shell('OS=Darwin; choose_model', 'q\n').returncode, 0)
         desktop = self.run_shell('OS=Darwin; choose_model', 'q\n').stdout
-        self.assertIn("Click the model selector", desktop)
-        self.assertIn('Type "Say hello"', desktop)
-        self.assertIn("Return here and enter that same model name", desktop)
+        self.assertIn("checks the exact tag", desktop)
+        self.assertIn("reused without pulling", desktop)
         self.assertIn("CPU only", self.prompt.read_text())
 
     def test_unsupported_os_arch_and_macos_version(self):
@@ -416,7 +453,7 @@ class WizardTests(unittest.TestCase):
         self.assertIn(str(self.repo), self.calls("code")[-1])
 
     def test_full_interactive_flow_with_fake_api(self):
-        answers = f"\n\nn\n\n1\nmodel:q4\n4\n65536\ny\ny\n{self.repo}\n"
+        answers = f"\nn\n\n1\nmodel:q4\n4\n65536\ny\ny\n{self.repo}\n"
         master, slave = pty.openpty()
         # Platform detection has its own tests; no host-specific install paths.
         command = self.source + 'detect_platform() { OS=Linux; ARCH=amd64; OS_VERSION=fixture; }; main'

@@ -34,12 +34,12 @@ bash ./scripts/setup-local-ai.sh
    caveats and an agent context budget. Emphasize **CPU-only Intel Mac**.
    No information is sent automatically; Gemini's recommendation is not proof
    that a model will be fast or useful.
-3. **Download in Ollama.** Open Ollama from Applications. Click the model
-   selector; type Gemini's exact name including its size tag. Select the local
-   model and click its download icon if shown. Type **Say hello**, press Enter
-   and wait for a reply. Return to the wizard with the same name, storage and
-   context budget. It reuses downloaded files and checks tools. Alternatively,
-   let the wizard download it.
+3. **Verify and download.** Paste Gemini's model, size estimate and context into
+   the wizard. It independently checks the exact registry tag, actual layer
+   size, GGUF context limit and free disk before a large pull. A known 32K tag
+   is rejected before download. Installed models are reused without updating;
+   new downloads also appear in Ollama. The wizard then checks advertised tools
+   and a harmless structured tool call. CPU-only performance may still be poor.
 4. **Use the Local AI profile.** The wizard installs official Chat/Ollama
    extensions there, preserving your original profile, and opens your checkout.
    Follow the final UI instructions: choose **Agent**, explicitly select your
