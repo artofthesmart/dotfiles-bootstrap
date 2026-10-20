@@ -102,6 +102,20 @@ For each platform, exercise these steps:
 
 ## Scope and recovery
 
+- **Windows iGPU memory:** report system RAM as one physical pool and use up to
+  50% as a dynamic shared-memory planning ceiling, not fixed VRAM or guaranteed
+  Ollama capacity. The Windows wizard no longer asks for an ambiguous GPU-memory
+  amount. Gemini must not infer BIOS reservations, add shared memory to RAM,
+  promise exact free RAM, or assume full GPU offload. Dedicated NVIDIA memory
+  remains separately identified when detected. The 50% rule is not applied to
+  macOS or to discrete VRAM.
+- **Tool smoke test:** both wizards now use Ollama's documented natural-language
+  `get_temperature` example, asking about New York. No weather function executes
+  and no external weather request occurs. Only an actual structured `tool_calls`
+  entry with the expected name and city passes; JSON in response text does not.
+  Live diagnosis on the installed Nemo 12B showed the old synthetic request
+  returning JSON prose while the documented example produced structured calls.
+  This establishes basic tool calling, not full VS Code Agent reliability.
 - **Storage:** the wizard asks about the running server's model directory.
   `OLLAMA_MODELS` in a terminal does not necessarily configure a separately
   running service. Supply that service's actual storage directory for disk

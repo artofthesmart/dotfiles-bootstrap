@@ -46,12 +46,14 @@ class OllamaFixture(http.server.BaseHTTPRequestHandler):
                 result["remote_host"] = "https://example.invalid"
         else:
             result = {"done": True, "message": {"tool_calls": [
-                {"function": {"name": "local_ai_check", "arguments": {"value": "ready"}}}
+                {"function": {"name": "get_temperature", "arguments": {"city": "New York"}}}
             ]}}
             if self.server.mode == "no-call":
                 result["message"] = {"content": "hello"}
             if self.server.mode == "wrong-call":
-                result["message"]["tool_calls"][0]["function"]["arguments"]["value"] = "wrong"
+                result["message"]["tool_calls"][0]["function"]["arguments"]["city"] = "wrong"
+            if self.server.mode == "json-prose":
+                result["message"] = {"content": '{"name":"get_temperature","arguments":{"city":"New York"}}'}
             if self.server.mode == "malformed":
                 self.send_response(200)
                 self.end_headers()
@@ -267,7 +269,7 @@ class WizardTests(unittest.TestCase):
                 self.assertIn(message, result.stderr)
 
     def test_failure_responses_never_claim_tool_success(self):
-        for mode in ["no-call", "wrong-call", "malformed", "http-error"]:
+        for mode in ["no-call", "wrong-call", "json-prose", "malformed", "http-error"]:
             with self.subTest(mode=mode):
                 self.server.mode = mode
                 result = self.run_shell('LOCAL_MODEL=model; CONTEXT=8192; check_model')

@@ -80,10 +80,13 @@ function Invoke-OllamaApi([string]$Endpoint, $Body = $null) {
             return [pscustomobject]@{ done = $true; done_reason = 'length'; message = [pscustomobject]@{ thinking = 'fixture reasoning' } }
         }
         if ($script:Mode -eq 'no-call') { return [pscustomobject]@{ done = $true; message = [pscustomobject]@{ content = 'hello' } } }
+        if ($script:Mode -eq 'json-prose') {
+            return [pscustomobject]@{ done = $true; message = [pscustomobject]@{ content = '{"name":"get_temperature","arguments":{"city":"New York"}}' } }
+        }
         if ($script:Mode -eq 'malformed') { return [pscustomobject]@{ unexpected = 1 } }
-        $value = if ($script:Mode -eq 'wrong-call') { 'wrong' } else { 'ready' }
+        $value = if ($script:Mode -eq 'wrong-call') { 'wrong' } else { 'New York' }
         return [pscustomobject]@{ done = $true; message = [pscustomobject]@{ tool_calls = @(
-            [pscustomobject]@{ function = [pscustomobject]@{ name = 'local_ai_check'; arguments = [pscustomobject]@{ value = $value } } }
+            [pscustomobject]@{ function = [pscustomobject]@{ name = 'get_temperature'; arguments = [pscustomobject]@{ city = $value } } }
         ) } }
     }
     return [pscustomobject]@{ version = 'fixture' }
@@ -114,7 +117,8 @@ try {
         Assert-Throws { Read-Choice 'fixture' } 'cancelled'
     }
     Test-Case 'Hardware prompt is allowlisted and unknown VRAM stays unknown' {
-        Set-Answers @('', 'n', '')
+        $script:Questions.Clear()
+        Set-Answers @('n', '')
         Write-HardwarePrompt
         $text = [IO.File]::ReadAllText((Get-PromptPath))
         Assert-True ((Get-PromptPath) -match 'Documents[/\\]Local-AI-Gemini-Prompt.txt$') 'Prompt is not in Documents'
@@ -124,6 +128,11 @@ try {
         Assert-True ($text -match '(?m)^MODEL: .+\r?\nDOWNLOAD_GIB: .+\r?\nCONTEXT_TOKENS: ') 'Missing ordered copy-back block'
         Assert-True ($text -match 'before\r?\nany greeting') 'Copy-back block is not required first'
         Assert-True ($text -match 'structured Ollama API tool_calls') 'Missing structured tool-call evidence requirement'
+        Assert-True ($text.Contains('up to 50% of system RAM (16 GiB)')) 'Missing RAM-derived iGPU planning ceiling'
+        Assert-True ($text.Contains('NOT a fixed reservation')) 'Shared memory described as fixed'
+        Assert-True ($text.Contains('Do not infer a BIOS carve-out')) 'Missing anti-inference memory rule'
+        Assert-True ($text.Contains('Do not claim exact remaining/free RAM')) 'Missing free-memory uncertainty'
+        Assert-True (@($script:Questions | Where-Object { $_ -match 'Optional GPU memory' }).Count -eq 0) 'Still asks for ambiguous shared VRAM'
         Assert-True ($text.Contains('MANDATORY FOR THIS SETUP')) 'Missing required context emphasis'
         Assert-True ($text.Contains('Do not lower context to make it fit')) 'Prompt permits lowering required context'
     }
@@ -202,10 +211,11 @@ try {
     Test-Case 'Actual valid tool-call output checked' {
         Test-LocalModel
         Assert-True ($script:LastBody.options.num_ctx -eq $script:Context) 'Wrong inference context'
-        Assert-True ($script:LastBody.tools[0].function.name -eq 'local_ai_check') 'Wrong tool'
+        Assert-True ($script:LastBody.tools[0].function.name -eq 'get_temperature') 'Wrong tool'
+        Assert-True ($script:LastBody.messages[0].content -eq 'What is the temperature in New York?') 'Not using documented natural-language tool request'
     }
     Test-Case 'Absent wrong malformed and HTTP-error tool responses fail' {
-        foreach ($mode in @('no-call', 'wrong-call', 'malformed', 'http-error')) {
+        foreach ($mode in @('no-call', 'wrong-call', 'json-prose', 'malformed', 'http-error')) {
             $script:Mode = $mode
             Assert-Throws { Test-LocalModel } 'NOT verified|HTTP 500'
         }
@@ -275,7 +285,7 @@ $global:LASTEXITCODE = 0
         foreach ($run in @(1, 2)) {
             Install-Applications
             Wait-Ollama
-            Set-Answers @('', 'n', '', '1', 'model:q4', '4', '65536', 'y', 'y', $script:Fixture)
+            Set-Answers @('n', '', '1', 'model:q4', '4', '65536', 'y', 'y', $script:Fixture)
             Write-HardwarePrompt
             Select-LocalModel
             Test-LocalModel

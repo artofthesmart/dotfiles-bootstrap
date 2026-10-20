@@ -345,16 +345,16 @@ choose_model() {
 check_model() {
     "$JQ" -n --arg model "$LOCAL_MODEL" --argjson context "$CONTEXT" '{
         model:$model, stream:false, options:{num_ctx:$context,num_predict:256,temperature:0},
-        messages:[{role:"user",content:"Call local_ai_check with value ready. Do not answer in prose."}],
-        tools:[{type:"function",function:{name:"local_ai_check",
-          description:"Harmless setup check. Call with value ready.",
-          parameters:{type:"object",properties:{value:{type:"string",enum:["ready"]}},required:["value"]}}}]
+        messages:[{role:"user",content:"What is the temperature in New York?"}],
+        tools:[{type:"function",function:{name:"get_temperature",
+          description:"Get the current temperature for a city",
+          parameters:{type:"object",properties:{city:{type:"string",description:"The name of the city"}},required:["city"]}}}]
     }' > "$WORK/chat-request.json"
     printf '\nChecking local inference and a harmless tool request (180-second limit; no tool will execute)...\n'
     api chat -H 'Content-Type: application/json' --data-binary "@$WORK/chat-request.json" > "$WORK/chat.json" ||
         fail "Inference failed/timed out. Check Ollama logs; try a smaller model that supports 65536+ context or retry after loading."
     "$JQ" -e '.done == true and any(.message.tool_calls[]?;
-        .function.name == "local_ai_check" and .function.arguments.value == "ready")' "$WORK/chat.json" >/dev/null ||
+        .function.name == "get_temperature" and (.function.arguments.city | ascii_downcase) == "new york")' "$WORK/chat.json" >/dev/null ||
         fail "Model did not produce the expected tool call. Try a reliable tool-capable model or compatible GGUF template."
     printf 'Local model tool-call check passed. Actual runtime/offload:\n'
     "$OLLAMA" ps
