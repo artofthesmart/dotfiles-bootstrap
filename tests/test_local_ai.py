@@ -171,9 +171,6 @@ class WizardTests(unittest.TestCase):
         self.log.touch()
         for name in ("id", "code", "ollama", "curl", "df", "nvidia-smi"):
             self.stub(name)
-        self.repo = self.base / "repo with spaces"
-        self.repo.mkdir()
-        subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
         self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), OllamaFixture)
         self.server.mode = "ok"
         self.server.requests = []
@@ -368,7 +365,7 @@ class WizardTests(unittest.TestCase):
         result = self.run_shell("hardware_prompt", "\nn\n\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         prompt = self.prompt.read_text()
-        for forbidden in [str(self.home), str(self.repo), self.env["USER"], "not-used.invalid"]:
+        for forbidden in [str(self.home), self.env["USER"], "not-used.invalid"]:
             self.assertNotIn(forbidden, prompt)
         self.assertIn("GPU memory: unknown", prompt)
         self.assertIn("TOOL CALLING", prompt)
@@ -424,7 +421,7 @@ class WizardTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("too old", result.stderr)
         self.env["MISSING_EXTENSION"] = "1"
-        result = self.run_shell("connect_code", f"y\n{self.repo}\n")
+        result = self.run_shell("connect_code", "y\n")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("not installed", result.stderr)
         for mode, message in [
@@ -435,13 +432,13 @@ class WizardTests(unittest.TestCase):
                 self.env.pop("MISSING_EXTENSION", None)
                 Path(self.env["EXTENSION_STATE"]).unlink(missing_ok=True)
                 self.env["FAIL_CODE"] = mode
-                result = self.run_shell("connect_code", f"y\n{self.repo}\n")
+                result = self.run_shell("connect_code", "y\n")
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(message, result.stderr)
                 self.env.pop("FAIL_CODE")
         self.env["FAIL_PROFILE_CREATE"] = "1"
         Path(self.env["PROFILE_STATE"]).unlink(missing_ok=True)
-        result = self.run_shell("sleep() { :; }; connect_code", f"y\n{self.repo}\n")
+        result = self.run_shell("sleep() { :; }; connect_code", "y\n")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("did not make the Local AI profile available", result.stderr)
 
@@ -502,24 +499,24 @@ class WizardTests(unittest.TestCase):
         self.env["CODE_VERSION"] = "1.127.0"
         self.assertEqual(self.run_shell("ensure_code").returncode, 0)
 
-    def test_profile_scope_repo_spaces_and_rerun_preserves_settings(self):
+    def test_profile_creation_and_rerun_preserve_settings(self):
         settings = self.home / ".config/Code/User/settings.json"
         settings.parent.mkdir(parents=True)
         settings.write_text('{"keep": "unchanged"}')
         for _ in range(2):
-            result = self.run_shell("LOCAL_MODEL=model; connect_code", f"y\n{self.repo}\n")
+            result = self.run_shell("LOCAL_MODEL=model; connect_code", "y\n")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(settings.read_text(), '{"keep": "unchanged"}')
         for row in self.calls("code"):
             self.assertEqual(row[row.index("--profile") + 1], "Local AI")
         self.assertFalse(any("GitHub.copilot-chat" in row for row in self.calls("code")))
-        self.assertTrue(any("--new-window" in row and str(self.repo) in row for row in self.calls("code")))
+        self.assertTrue(any(row == ["code", "--new-window", "--profile", "Local AI"] for row in self.calls("code")))
         launches = [i for i, row in enumerate(self.calls("code")) if "--new-window" in row]
         installs = [i for i, row in enumerate(self.calls("code")) if "--install-extension" in row]
         self.assertTrue(launches and installs and launches[0] < installs[0])
 
     def test_full_interactive_flow_with_fake_api(self):
-        answers = f"\nn\n\nllama3.1:8b\n5\n65536\ny\ny\n{self.repo}\n"
+        answers = "\nn\n\nllama3.1:8b\n5\n65536\ny\ny\n"
         master, slave = pty.openpty()
         # Platform detection has its own tests; no host-specific install paths.
         command = self.source + 'detect_platform() { OS=Linux; ARCH=amd64; OS_VERSION=fixture; }; main'

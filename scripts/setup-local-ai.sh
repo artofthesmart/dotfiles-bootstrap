@@ -529,15 +529,9 @@ wait_for_code_profile() {
 connect_code() {
     printf '\nGitHub Copilot Chat is bundled with this supported VS Code version.\n'
     printf 'Installing the official Ollama extension only for the Local AI profile.\n'
-    confirm "Open your repository in Local AI and install Ollama.ollama" || fail "Profile setup cancelled."
-    local repo
-    ask "Full path to an existing locally checked-out repository"
-    repo=$ANSWER
-    [[ "$repo" = /* ]] && [ -d "$repo" ] || fail "Choose an existing absolute directory path."
-    command -v git >/dev/null || fail "Git is needed to verify the checkout. Install Git and rerun."
-    git -C "$repo" rev-parse --show-toplevel >/dev/null 2>&1 || fail "That directory is not in a Git checkout."
-    "$CODE" --new-window --profile "Local AI" "$repo" ||
-        fail "VS Code could not open the repository with the Local AI profile."
+    confirm "Create/reuse Local AI and install Ollama.ollama" || fail "Profile setup cancelled."
+    "$CODE" --new-window --profile "Local AI" ||
+        fail "VS Code could not open the Local AI profile."
     wait_for_code_profile
     if grep -qi '^Ollama.ollama$' "$WORK/extensions.txt"; then
         printf 'The Ollama extension is already installed in Local AI; no reinstall needed.\n'
@@ -552,7 +546,8 @@ connect_code() {
     cat <<INSTRUCTIONS
 
 Finish in the Local AI window (these UI steps are not automated):
-1. Trust the workspace only if you trust this repository.
+1. Open or clone a repository with File > Open Folder, File > Open Recent, or
+   Source Control > Clone Repository. Trust only repositories you trust.
 2. Open the built-in Copilot Chat, select Agent mode, then select $LOCAL_MODEL under Ollama.
    Do NOT select Auto or a cloud model. If missing, run "Ollama: Refresh Models"
    or "Ollama: Diagnose Models" from the Command Palette.

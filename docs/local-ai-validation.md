@@ -37,7 +37,7 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\tests\test-local
 ```
 
 Python is a **test-runner prerequisite only**, not a wizard prerequisite. Bash
-tests also require existing curl, jq and Git. PowerShell tests have no Pester
+tests also require existing curl and jq. PowerShell tests have no Pester
 dependency. They dot-source the wizard rather than running its installer entry
 point. Fixtures and fake executables prevent real installs, downloads or edits
 to user profiles. The Bash full-flow test uses a terminal fixture and a fake
@@ -185,10 +185,12 @@ For each platform, exercise these steps:
   extension. The wizard installs only `Ollama.ollama` into Local AI. Native
   command failures now include the command, exit code, stdout and stderr for
   diagnosis, including version and extension-list checks. On a first run, the
-  wizard validates the repository and opens it with `--profile "Local AI"`
-  before installing the extension, because launching creates a missing profile
-  while `--install-extension --profile` alone can fail with "Profile not found."
-  It waits briefly for profile creation, then installs and verifies the extension.
+  wizard opens a blank window with `--profile "Local AI"` before installing the
+  extension, because launching creates a missing profile while
+  `--install-extension --profile` alone can fail with "Profile not found." It
+  waits briefly for profile creation, then installs and verifies the extension.
+  The user can then open or clone any repository from VS Code; setup does not
+  require, inspect or validate a repository path.
 - **Download transport:** application installers and Ollama registry metadata
   must begin and remain on HTTPS across redirects. A downgrade to HTTP is
   rejected. This protects transport integrity but does not pin release content;

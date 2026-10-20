@@ -740,13 +740,8 @@ function Connect-Code {
         Write-Warning 'Local tool use is UNVERIFIED. Test an approved edit in VS Code; choose another model if Agent tools fail.'
     }
     Write-Host 'GitHub Copilot Chat is bundled with this supported VS Code version; no marketplace install is needed.'
-    if (-not (Confirm-Step 'Open your repository in Local AI and install the official Ollama.ollama extension only for that profile')) { throw 'Profile setup cancelled.' }
-    $repo = Read-Choice 'Full path to an existing locally checked-out repository'
-    if (-not [IO.Path]::IsPathRooted($repo) -or -not (Test-Path -LiteralPath $repo -PathType Container)) { throw 'Choose an existing absolute directory.' }
-    $git = Get-Command git.exe -CommandType Application -ErrorAction SilentlyContinue
-    if (-not $git) { throw 'Git is required to verify the checkout. Install Git and rerun.' }
-    Invoke-Native $git.Source @('-C', $repo, 'rev-parse', '--show-toplevel')
-    Invoke-Native $script:Code @('--new-window', '--profile', 'Local AI', $repo)
+    if (-not (Confirm-Step 'Create/reuse Local AI and install the official Ollama.ollama extension only for that profile')) { throw 'Profile setup cancelled.' }
+    Invoke-Native $script:Code @('--new-window', '--profile', 'Local AI')
     $extensions = @(Wait-CodeProfile)
     if ($extensions -contains 'Ollama.ollama') {
         Write-Host 'The Ollama extension is already installed in Local AI; no reinstall needed.' -ForegroundColor Green
@@ -760,7 +755,8 @@ function Connect-Code {
     Write-Host @"
 
 Finish in the Local AI window (these UI steps are not automated):
-1. Trust the workspace only if you trust this repository.
+1. Open or clone a repository: use File > Open Folder, File > Open Recent, or
+   Source Control > Clone Repository. Trust only repositories you trust.
 2. Open the built-in Copilot Chat, select Agent mode, then $script:LocalModel under Ollama.
    Do NOT select Auto or a cloud model. If missing, use the Command Palette:
    Ollama: Refresh Models, or Ollama: Diagnose Models.

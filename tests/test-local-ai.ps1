@@ -351,7 +351,8 @@ try {
         $source = [IO.File]::ReadAllText($scriptPath)
         Assert-True ($source -notmatch "'--install-extension', 'GitHub.copilot-chat'") 'Tried to install bundled Copilot Chat from the marketplace'
         Assert-True ($source -match "'--profile', 'Local AI', '--install-extension', 'Ollama.ollama'") 'Ollama extension not profile-scoped'
-        Assert-True ($source -match "'--new-window', '--profile', 'Local AI', \`$repo") 'Repository launch not profile-scoped'
+        Assert-True ($source -match "'--new-window', '--profile', 'Local AI'\)") 'Profile creation launch is missing'
+        Assert-True ($source -notmatch 'Full path to an existing locally checked-out repository') 'Still asks for a repository path'
         Assert-True ($source -notmatch 'Invoke-Expression|Set-ExecutionPolicy|AdapterRAM\s*=') 'Unexpected unsafe/global behavior'
         Assert-True ($source.Contains('checks the exact Ollama tag')) 'Missing exact-tag preflight explanation'
         Assert-True ($source.Contains('reused without pulling it again')) 'Missing installed-model reuse explanation'
@@ -384,18 +385,13 @@ $global:LASTEXITCODE = 0
         function Get-Code { return $cli }
         function Get-Ollama { return 'fixture-ollama' }
         function Wait-CodeProfile { return @() }
-        function Get-Command {
-            param($Name, $CommandType, $ErrorAction)
-            if ($Name -eq 'git.exe') { return [pscustomobject]@{ Source = 'fixture-git' } }
-            return Microsoft.PowerShell.Core\Get-Command @PSBoundParameters
-        }
         $defaultSettings = Join-Path $script:Fixture 'default-settings.json'
         [IO.File]::WriteAllText($defaultSettings, '{"keep":"unchanged"}')
         $script:Calls.Clear()
         foreach ($run in @(1, 2)) {
             Install-Applications
             Wait-Ollama
-            Set-Answers @('n', '', 'model:q4', '4', '65536', 'y', 'y', $script:Fixture)
+            Set-Answers @('n', '', 'model:q4', '4', '65536', 'y', 'y')
             Write-HardwarePrompt
             Select-LocalModel
             Test-LocalModel
