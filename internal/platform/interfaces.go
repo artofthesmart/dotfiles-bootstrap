@@ -15,6 +15,7 @@ type FileSystem interface {
 	MkdirAll(string, fs.FileMode) error
 	Rename(string, string) error
 	Remove(string) error
+	Sync(string) error
 }
 
 type Command struct {

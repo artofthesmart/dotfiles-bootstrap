@@ -4,7 +4,7 @@ COMMIT ?= none
 DATE ?= unknown
 LDFLAGS := -X main.Version=$(VERSION) -X main.Commit=$(COMMIT) -X main.Date=$(DATE)
 
-.PHONY: build test vet fmt-check cross-build clean
+.PHONY: build test race integration test-race test-integration vet fmt-check cross-build clean
 
 build:
 	@mkdir -p build
@@ -12,6 +12,16 @@ build:
 
 test:
 	$(GO) test ./...
+
+test-race:
+	$(GO) test -race ./...
+
+race: test-race
+
+test-integration:
+	$(GO) test -tags=integration ./integration
+
+integration: test-integration
 
 vet:
 	$(GO) vet ./...

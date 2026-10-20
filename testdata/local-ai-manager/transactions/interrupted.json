@@ -1,0 +1,43 @@
+{
+  "schema_version": "local-ai.transaction-state/v1",
+  "manager_version": "0.1.0",
+  "transaction_id": "00000000-0000-4000-8000-000000000002",
+  "command": "setup",
+  "status": "interrupted",
+  "created_at": "2026-10-20T18:00:00Z",
+  "updated_at": "2026-10-20T18:02:00Z",
+  "effective_config_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "selected_catalog_id": "example-20b-q4",
+  "generated_alias": "local-ai-example:latest",
+  "host": {
+    "os": "linux",
+    "architecture": "amd64",
+    "os_version": "24.04",
+    "linux_distribution": "ubuntu",
+    "desktop_session": true,
+    "capability_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+  },
+  "steps": [],
+  "managed_assets": [],
+  "issues": [
+    {
+      "code": "LAI-STATE-003",
+      "severity": "warning",
+      "domain": "state",
+      "summary": "The operation stopped after a durable mutation and can be resumed.",
+      "remediations": [
+        {
+          "kind": "retry",
+          "summary": "Resume the compatible transaction.",
+          "safe_for_yes": true
+        }
+      ]
+    }
+  ],
+  "manual_actions": [],
+  "rollback": {
+    "available": true,
+    "status": "available",
+    "step_ids": []
+  }
+}

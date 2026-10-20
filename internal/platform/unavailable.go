@@ -40,6 +40,10 @@ func (UnavailableFileSystem) Remove(string) error {
 	return ErrUnavailable
 }
 
+func (UnavailableFileSystem) Sync(string) error {
+	return ErrUnavailable
+}
+
 // UnavailableRunner keeps the scaffold incapable of starting host commands.
 type UnavailableRunner struct{}
 

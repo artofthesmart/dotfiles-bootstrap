@@ -1,0 +1,9 @@
+{
+  "model_format": "gguf",
+  "model_family": "example",
+  "model_families": [
+    "example"
+  ],
+  "model_type": "20B",
+  "file_type": "Q4_K_M"
+}

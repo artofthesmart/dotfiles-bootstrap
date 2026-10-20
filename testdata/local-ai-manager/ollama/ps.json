@@ -1,0 +1,19 @@
+{
+  "models": [
+    {
+      "name": "local-ai-example:latest",
+      "model": "local-ai-example:latest",
+      "size": 12884901888,
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "details": {
+        "format": "gguf",
+        "family": "example",
+        "parameter_size": "20B",
+        "quantization_level": "Q4_K_M"
+      },
+      "expires_at": "2026-10-20T18:10:00Z",
+      "size_vram": 12884901888,
+      "context_length": 65536
+    }
+  ]
+}

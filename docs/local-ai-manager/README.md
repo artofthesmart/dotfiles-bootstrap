@@ -37,6 +37,8 @@ The manager scaffold requires only Go 1.22 or newer:
 
 ```sh
 make test
+make race
+make integration
 make vet
 make fmt-check
 make build

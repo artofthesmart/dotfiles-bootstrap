@@ -1,0 +1,17 @@
+{
+  "models": [
+    {
+      "name": "local-ai-example:latest",
+      "model": "local-ai-example:latest",
+      "modified_at": "2026-10-20T18:00:00Z",
+      "size": 12884901888,
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "details": {
+        "format": "gguf",
+        "family": "example",
+        "parameter_size": "20B",
+        "quantization_level": "Q4_K_M"
+      }
+    }
+  ]
+}

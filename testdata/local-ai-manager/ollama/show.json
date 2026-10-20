@@ -1,0 +1,24 @@
+{
+  "license": "Apache-2.0",
+  "modelfile": "FROM example:20b\nPARAMETER num_ctx 65536",
+  "parameters": "num_ctx 65536",
+  "template": "{{ .Messages }}",
+  "details": {
+    "parent_model": "",
+    "format": "gguf",
+    "family": "example",
+    "families": [
+      "example"
+    ],
+    "parameter_size": "20B",
+    "quantization_level": "Q4_K_M"
+  },
+  "model_info": {
+    "general.architecture": "example",
+    "example.context_length": 131072
+  },
+  "capabilities": [
+    "completion",
+    "tools"
+  ]
+}
