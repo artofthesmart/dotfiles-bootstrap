@@ -106,6 +106,10 @@ func (e Engine) Execute(ctx context.Context, request ExecuteRequest) (Transactio
 		return Transaction{}, loadErr
 	}
 
+	if err := e.syncManualActions(ctx, &current, request.Steps); err != nil {
+		return current, err
+	}
+
 	if request.Options.DryRun {
 		return e.executeDryRun(ctx, current, request.Steps)
 	}
@@ -661,6 +665,7 @@ func (e Engine) now() time.Time {
 
 func newTransaction(spec TransactionSpec, steps []Step, now time.Time) Transaction {
 	receipts := make([]StepReceipt, 0, len(steps))
+	manualActions := make([]ManualAction, 0)
 	for _, step := range steps {
 		contract := step.Contract()
 		consent := &Consent{Required: contract.ConsentRequired, Decision: ConsentNotRequired}
@@ -687,6 +692,9 @@ func newTransaction(spec TransactionSpec, steps []Step, now time.Time) Transacti
 			MutationAssetIDs: []string{},
 			Issues:           []Issue{},
 		})
+		if provider, ok := step.(ManualActionProvider); ok {
+			manualActions = append(manualActions, cloneManualActions(provider.ManualActions())...)
+		}
 	}
 	return Transaction{
 		SchemaVersion:         TransactionSchemaVersion,
@@ -703,9 +711,53 @@ func newTransaction(spec TransactionSpec, steps []Step, now time.Time) Transacti
 		Steps:                 receipts,
 		ManagedAssets:         []ManagedAsset{},
 		Issues:                []Issue{},
-		ManualActions:         []ManualAction{},
+		ManualActions:         manualActions,
 		Rollback:              Rollback{Available: false, Status: RollbackNotNeeded, StepIDs: []string{}},
 	}
+}
+
+func cloneManualActions(actions []ManualAction) []ManualAction {
+	if actions == nil {
+		return []ManualAction{}
+	}
+	cloned := make([]ManualAction, len(actions))
+	copy(cloned, actions)
+	return cloned
+}
+
+func manualActionsFromSteps(steps []Step) []ManualAction {
+	actions := make([]ManualAction, 0)
+	for _, step := range steps {
+		if provider, ok := step.(ManualActionProvider); ok {
+			actions = append(actions, cloneManualActions(provider.ManualActions())...)
+		}
+	}
+	return actions
+}
+
+func (e Engine) syncManualActions(ctx context.Context, transaction *Transaction, steps []Step) error {
+	desired := manualActionsFromSteps(steps)
+	if len(desired) != len(transaction.ManualActions) {
+		return fmt.Errorf("%w: manual action contract changed", ErrIncompatibleResume)
+	}
+	changed := false
+	for index := range desired {
+		current := transaction.ManualActions[index]
+		next := desired[index]
+		if current.ActionID != next.ActionID || current.IssueCode != next.IssueCode || current.Surface != next.Surface || current.Summary != next.Summary {
+			return fmt.Errorf("%w: manual action contract changed", ErrIncompatibleResume)
+		}
+		if current.Completed != next.Completed {
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	return e.mutateAndSave(ctx, transaction, func() error {
+		transaction.ManualActions = desired
+		return nil
+	})
 }
 
 func emptyPhase() PhaseReceipt {

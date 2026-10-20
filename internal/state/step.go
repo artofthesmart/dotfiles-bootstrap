@@ -71,6 +71,10 @@ type Step interface {
 	Undo(context.Context, StepContext) (UndoResult, error)
 }
 
+type ManualActionProvider interface {
+	ManualActions() []ManualAction
+}
+
 type StepError struct {
 	Issue Issue
 	Err   error

@@ -1,0 +1,15 @@
+{
+  "evidence_date": "2026-10-20",
+  "source_commit": "4b4d8c345a8929db4541e2a23f26fe07b0a5bca1",
+  "source_url": "https://github.com/ollama/ollama-vscode/blob/4b4d8c345a8929db4541e2a23f26fe07b0a5bca1/package.json",
+  "publisher": "Ollama",
+  "name": "ollama",
+  "version": "0.0.13",
+  "engines": {
+    "vscode": "^1.127.0"
+  },
+  "commands": [
+    "ollama.refreshModels",
+    "ollama.diagnoseModels"
+  ]
+}

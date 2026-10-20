@@ -2,7 +2,7 @@
 
 Contract baseline: **v1.0.0**, approved October 20, 2026.
 
-These documents define the product boundary for the future `local-ai` manager before any Go module or host-mutating implementation exists. The manager is independent of `bootstrap.sh`, `setup.py`, and `setup_termux.sh`; it must not import their state, invoke them, or change their defaults.
+These documents define the product boundary for the independently implemented `local-ai` manager. The manager is independent of `bootstrap.sh`, `setup.py`, and `setup_termux.sh`; it does not import their state, invoke them, or change their defaults.
 
 ## Contract set
 
@@ -35,7 +35,7 @@ The JSON schemas use JSON Schema Draft 2020-12. Every persisted or streamed obje
 
 ## Scaffold development
 
-The manager scaffold requires only Go 1.22 or newer:
+Manager development requires Go 1.22 or newer:
 
 ```sh
 make test
@@ -47,3 +47,5 @@ make build
 ```
 
 Use `make cross-build` to compile Windows, macOS, and Linux binaries for amd64 and arm64. Generated binaries are written under `build/`; remove them with `make clean`.
+
+`internal/vscode` now implements the production VS Code lifecycle boundary: supported application discovery, the official Ollama extension's reviewed version gate, documented profile creation/readiness polling, profile-scoped extension repair, redacted diagnostics, state-engine receipts/resume, and protected UI handoff as `awaiting_manual`. CLI/TUI command wiring remains intentionally separate.

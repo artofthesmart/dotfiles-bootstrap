@@ -1,3 +1,5 @@
-// Package vscode defines supported CLI discovery, profile, extension, and UI
-// handoff boundaries without editing undocumented profile storage.
+// Package vscode implements supported VS Code discovery, version gating,
+// profile readiness, profile-scoped official extension management, diagnosis,
+// repair, transaction steps, and explicit UI handoffs. It never edits
+// undocumented VS Code profile storage or changes trust and approval settings.
 package vscode

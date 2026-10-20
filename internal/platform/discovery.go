@@ -86,6 +86,7 @@ func (locator StandardApplicationLocator) expand(name string) string {
 		"${HOME}", environmentValue(locator.Environment, "HOME"),
 		"${LOCALAPPDATA}", environmentValue(locator.Environment, "LOCALAPPDATA"),
 		"${PROGRAMFILES}", environmentValue(locator.Environment, "ProgramFiles"),
+		"${PROGRAMFILES_X86}", environmentValue(locator.Environment, "ProgramFiles(x86)"),
 	)
 	return filepath.Clean(replacer.Replace(name))
 }
@@ -121,6 +122,11 @@ func standardExecutablePaths() map[string][]string {
 			"/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
 			"${LOCALAPPDATA}/Programs/Microsoft VS Code/bin/code.cmd",
 			"${PROGRAMFILES}/Microsoft VS Code/bin/code.cmd",
+			"${PROGRAMFILES_X86}/Microsoft VS Code/bin/code.cmd",
+			"/usr/share/code/bin/code",
+			"/snap/bin/code",
+			"/var/lib/flatpak/exports/bin/com.visualstudio.code",
+			"${HOME}/.local/share/flatpak/exports/bin/com.visualstudio.code",
 		},
 		"ollama": {
 			"/usr/local/bin/ollama",
@@ -138,6 +144,7 @@ func standardApplicationPaths() map[string][]string {
 			"/Applications/Visual Studio Code.app",
 			"${LOCALAPPDATA}/Programs/Microsoft VS Code/Code.exe",
 			"${PROGRAMFILES}/Microsoft VS Code/Code.exe",
+			"${PROGRAMFILES_X86}/Microsoft VS Code/Code.exe",
 		},
 		"ollama": {
 			"/Applications/Ollama.app",
