@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:local-ai-manager:schema:config:v1",
   "title": "Local AI Manager configuration v1",
-  "description": "User-authored configuration for stable Local AI Manager commands. Command-line values override this file. The file MUST NOT contain credentials, tokens, proxy authorization, arbitrary environment variables, repository content, prompts, model responses, literal usernames/hostnames, device identifiers, or network identifiers.",
+  "description": "User-authored configuration for stable Local AI Manager commands. Precedence is defaults, this file, the documented environment allowlist, then command-line values. The file MUST NOT contain credentials, tokens, proxy authorization, arbitrary environment variables, repository content, prompts, model responses, literal usernames/hostnames, device identifiers, or network identifiers.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -287,4 +287,3 @@
     }
   }
 }
-

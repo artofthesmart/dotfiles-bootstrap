@@ -86,6 +86,8 @@
         "models_remove",
         "vscode_configure",
         "vscode_open",
+        "copilot_configure",
+        "copilot_open",
         "verify",
         "update",
         "update_rollback",

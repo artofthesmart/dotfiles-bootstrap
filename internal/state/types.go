@@ -10,14 +10,15 @@ const (
 type Command string
 
 const (
-	CommandSetup           Command = "setup"
-	CommandRepair          Command = "repair"
-	CommandModelsInstall   Command = "models_install"
-	CommandModelsRemove    Command = "models_remove"
-	CommandVSCodeConfigure Command = "vscode_configure"
-	CommandUpdate          Command = "update"
-	CommandUpdateRollback  Command = "update_rollback"
-	CommandUninstall       Command = "uninstall"
+	CommandSetup            Command = "setup"
+	CommandRepair           Command = "repair"
+	CommandModelsInstall    Command = "models_install"
+	CommandModelsRemove     Command = "models_remove"
+	CommandVSCodeConfigure  Command = "vscode_configure"
+	CommandCopilotConfigure Command = "copilot_configure"
+	CommandUpdate           Command = "update"
+	CommandUpdateRollback   Command = "update_rollback"
+	CommandUninstall        Command = "uninstall"
 )
 
 type TransactionStatus string

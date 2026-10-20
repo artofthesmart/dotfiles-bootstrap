@@ -654,7 +654,7 @@ func contains(values []string, target string) bool {
 
 func validCommand(value Command) bool {
 	switch value {
-	case CommandSetup, CommandRepair, CommandModelsInstall, CommandModelsRemove, CommandVSCodeConfigure, CommandUpdate, CommandUpdateRollback, CommandUninstall:
+	case CommandSetup, CommandRepair, CommandModelsInstall, CommandModelsRemove, CommandVSCodeConfigure, CommandCopilotConfigure, CommandUpdate, CommandUpdateRollback, CommandUninstall:
 		return true
 	default:
 		return false

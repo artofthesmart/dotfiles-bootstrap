@@ -19,7 +19,7 @@ import (
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/testkit"
 )
 
-func TestRealBinaryScaffoldDoesNotMutateOutsideSandbox(t *testing.T) {
+func TestRealBinaryStableReadOnlyCommandsDoNotMutateOutsideSandbox(t *testing.T) {
 	repository := findRepositoryRoot(t)
 	paths := testkit.NewTempManagerPaths(t)
 	goBinary, err := exec.LookPath("go")
@@ -58,19 +58,20 @@ func TestRealBinaryScaffoldDoesNotMutateOutsideSandbox(t *testing.T) {
 	assertCommand(t, paths, guard, []string{"help"}, 0, "Local AI Manager")
 	assertCommand(t, paths, guard, []string{"version"}, 0, "local-ai dev")
 	for _, arguments := range [][]string{
-		{"status", "--json"},
 		{"models", "list", "--json"},
-		{"setup", "--json"},
+		{"report", "--dry-run", "--json"},
 	} {
-		output := assertCommand(t, paths, guard, arguments, int(app.ExitInternalFailure), `"record_type":"result"`)
+		output := assertCommand(t, paths, guard, arguments, int(app.ExitSuccess), `"record_type":"result"`)
+		lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 		var result app.Result
-		if err := json.Unmarshal(output, &result); err != nil {
+		if err := json.Unmarshal([]byte(lines[len(lines)-1]), &result); err != nil {
 			t.Fatalf("%v did not emit valid JSON: %v\n%s", arguments, err, output)
 		}
-		if result.Outcome != app.OutcomeFailed || result.ExitCode != app.ExitInternalFailure {
+		if result.Outcome != app.OutcomeSuccess || result.ExitCode != app.ExitSuccess {
 			t.Fatalf("%v result = %#v", arguments, result)
 		}
 	}
+	assertCommand(t, paths, guard, []string{"status", "--endpoint", "https://example.com"}, int(app.ExitConfigurationFailure), "configuration")
 
 	after := snapshot(t, guard)
 	if !equalSnapshots(before, after) {

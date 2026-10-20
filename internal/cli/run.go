@@ -2,58 +2,97 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/app"
-	"github.com/artofthesmart/dotfiles-bootstrap/internal/install"
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/platform"
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/ui"
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/update"
 )
 
 type Dependencies struct {
-	Stdout  io.Writer
-	Stderr  io.Writer
-	Clock   app.Clock
-	FS      platform.FileSystem
-	Runner  platform.Runner
-	Network platform.Network
-	Build   app.BuildInfo
-	Service app.Service
-	Updater update.Updater
+	Stdin       io.Reader
+	Stdout      io.Writer
+	Stderr      io.Writer
+	Clock       app.Clock
+	FS          platform.FileSystem
+	Runner      platform.Runner
+	Network     platform.Network
+	Build       app.BuildInfo
+	Service     app.Service
+	Updater     update.Updater
+	Terminal    ui.Terminal
+	Environment map[string]string
 }
 
 func Run(ctx context.Context, args []string, deps Dependencies) int {
-	if deps.Stdout == nil || deps.Stderr == nil || deps.Clock == nil ||
-		deps.FS == nil || deps.Runner == nil || deps.Network == nil {
+	if deps.Stdout == nil || deps.Stderr == nil || deps.Clock == nil {
 		return int(app.ExitInternalFailure)
 	}
+	guidedNeeded := len(args) == 0
+	if !guidedNeeded {
+		preliminary, err := parseInvocation(args)
+		if err != nil {
+			return writeInvocationError(deps, commandHint(args), err, containsArg(args, "--json"))
+		}
+		guidedNeeded = len(preliminary.commandTokens) == 0 && !preliminary.help && !preliminary.version
+	}
+	if guidedNeeded {
+		terminal := deps.Terminal
+		if terminal == nil {
+			if deps.Stdin == nil {
+				return writeInvocationError(deps, app.CommandSetup, errors.New("interactive input is unavailable"), false)
+			}
+			output := deps.Stdout
+			if len(args) > 0 {
+				output = deps.Stderr
+			}
+			terminal = ui.NewPlainTerminal(deps.Stdin, output)
+		}
+		guided, err := ui.GuidedArguments(ctx, terminal)
+		if err != nil {
+			if errors.Is(err, ui.ErrCancelled) || errors.Is(err, context.Canceled) {
+				result := resultForInvocationError(deps.Clock, app.CommandSetup, app.OutcomeCancelled, app.ExitCancelled, app.IssueConsentDeclined, "The guided operation was cancelled.")
+				ui.RenderResult(deps.Stderr, result)
+				return int(result.ExitCode)
+			}
+			return writeInvocationError(deps, app.CommandSetup, err, false)
+		}
+		args = append(args, guided...)
+	}
 
-	jsonMode, args := extractFlag(args, "--json")
-	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
+	parsed, err := parseInvocation(args)
+	if err != nil {
+		return writeInvocationError(deps, commandHint(args), err, containsArg(args, "--json"))
+	}
+	if parsed.help || (len(parsed.commandTokens) > 0 && parsed.commandTokens[0] == "help") {
 		printHelp(deps.Stdout)
 		return int(app.ExitSuccess)
 	}
-	if args[0] == "version" {
+	if parsed.version || (len(parsed.commandTokens) > 0 && parsed.commandTokens[0] == "version") {
 		printVersion(deps.Stdout, deps.Build)
 		return int(app.ExitSuccess)
 	}
 
-	operation, ok := parseOperation(args)
-	if !ok {
-		fmt.Fprintln(deps.Stderr, "local-ai: invalid command; run 'local-ai help'")
-		return int(app.ExitConfigurationFailure)
+	config, _, err := loadConfig(deps.FS, parsed.configPath, deps.Environment)
+	if err != nil {
+		return writeInvocationError(deps, commandHint(parsed.commandTokens), err, parsed.json)
 	}
-	if (operation.Command == app.CommandUpdate || operation.Command == app.CommandUpdateRollback) && deps.Updater != nil {
-		result := runUpdate(ctx, operation, deps)
-		if jsonMode {
-			encoder := json.NewEncoder(deps.Stdout)
-			encoder.SetEscapeHTML(false)
-			if err := encoder.Encode(result); err != nil {
+	parsed.apply(&config)
+	if err := validateConfig(config); err != nil {
+		return writeInvocationError(deps, commandHint(parsed.commandTokens), err, parsed.json || config.Behavior.Output == "json")
+	}
+	operation, err := parsed.operation(config)
+	if err != nil {
+		return writeInvocationError(deps, commandHint(parsed.commandTokens), err, parsed.json || config.Behavior.Output == "json")
+	}
+	if deps.Service == nil {
+		result := resultForInvocationError(deps.Clock, operation.Command, app.OutcomeFailed, app.ExitInternalFailure, app.IssueInternal, "The application service is unavailable.")
+		if config.Behavior.Output == "json" {
+			if err := newJSONStream(deps.Stdout).Result(result); err != nil {
 				return int(app.ExitInternalFailure)
 			}
 		} else {
@@ -62,150 +101,118 @@ func Run(ctx context.Context, args []string, deps Dependencies) int {
 		return int(result.ExitCode)
 	}
 
-	service := deps.Service
-	if service == nil {
-		service = app.PlaceholderService{
-			Clock: deps.Clock,
-			Platform: platform.Capabilities{
-				FileSystem: deps.FS,
-				Runner:     deps.Runner,
-				Network:    deps.Network,
-			},
+	jsonMode := config.Behavior.Output == "json"
+	var stream *jsonStream
+	if jsonMode {
+		stream = newJSONStream(deps.Stdout)
+		operation.Events = stream
+		if err := stream.Emit(app.Event{
+			Timestamp:  deps.Clock.Now().UTC(),
+			Command:    operation.Command,
+			Kind:       "operation_started",
+			Level:      "info",
+			Message:    "The command started.",
+			Attributes: map[string]any{"dry_run": operation.DryRun},
+		}); err != nil {
+			return int(app.ExitInternalFailure)
 		}
 	}
-	result := service.Execute(ctx, operation)
+
+	result := deps.Service.Execute(ctx, operation)
+	result.SchemaVersion = app.EventSchemaVersion
+	result.RecordType = "result"
+	result.Command = operation.Command
+	if result.Timestamp.IsZero() {
+		result.Timestamp = deps.Clock.Now().UTC()
+	}
+	normalizeResult(&result)
 
 	if jsonMode {
-		encoder := json.NewEncoder(deps.Stdout)
-		encoder.SetEscapeHTML(false)
-		if err := encoder.Encode(result); err != nil {
+		if err := stream.Result(result); err != nil {
 			fmt.Fprintln(deps.Stderr, "local-ai: could not write JSON result")
 			return int(app.ExitInternalFailure)
 		}
 	} else {
-		ui.RenderResult(deps.Stderr, result)
+		ui.RenderResult(deps.Stdout, result)
 	}
-
 	return int(result.ExitCode)
 }
 
-func runUpdate(ctx context.Context, operation app.Operation, deps Dependencies) app.Result {
-	var err error
-	if operation.Command == app.CommandUpdateRollback {
-		err = deps.Updater.Rollback(ctx)
-	} else {
-		var release update.Release
-		release, err = deps.Updater.Check(ctx)
-		if err == nil {
-			err = deps.Updater.Apply(ctx, release)
-		}
+func writeInvocationError(deps Dependencies, command app.Command, err error, jsonMode bool) int {
+	if command == "" {
+		fmt.Fprintf(deps.Stderr, "local-ai: %v; run 'local-ai help'\n", err)
+		return int(app.ExitConfigurationFailure)
 	}
-	result := app.Result{
+	result := resultForInvocationError(deps.Clock, command, app.OutcomeFailed, app.ExitConfigurationFailure, app.IssueConfigurationInvalid, "The command configuration is invalid.")
+	if jsonMode {
+		stream := newJSONStream(deps.Stdout)
+		if streamErr := stream.Result(result); streamErr != nil {
+			return int(app.ExitInternalFailure)
+		}
+	} else {
+		fmt.Fprintf(deps.Stderr, "local-ai: %v\n", err)
+		ui.RenderResult(deps.Stderr, result)
+	}
+	return int(result.ExitCode)
+}
+
+func resultForInvocationError(clock app.Clock, command app.Command, outcome app.Outcome, exit app.ExitCode, code app.IssueCode, summary string) app.Result {
+	return app.Result{
 		SchemaVersion: app.EventSchemaVersion,
 		RecordType:    "result",
-		Timestamp:     deps.Clock.Now().UTC(),
-		Command:       operation.Command,
+		Timestamp:     clock.Now().UTC(),
+		Command:       command,
+		Outcome:       outcome,
+		ExitCode:      exit,
+		Summary:       summary,
+		Issues: []app.Issue{{
+			Code: code, Severity: severityForOutcome(outcome), Domain: invocationDomain(code), Summary: summary,
+			Remediations: []app.Remediation{{Kind: "documentation", Summary: "Review local-ai help and the versioned configuration contract.", SafeForYes: false}},
+		}},
 		Components:    []app.Component{},
-		Issues:        []app.Issue{},
 		ManualActions: []app.ManualAction{},
 	}
-	if err == nil {
-		result.Outcome = app.OutcomeSuccess
-		result.ExitCode = app.ExitSuccess
-		result.Summary = "The manager deployment operation completed successfully."
-		return result
-	}
-	code := app.IssueInternal
-	var deploymentError *install.DeploymentError
-	if errors.As(err, &deploymentError) {
-		code = deploymentError.Code
-	}
-	issue := app.Issue{
-		Code: code, Severity: app.SeverityError, Domain: "update",
-		Summary: "The manager deployment operation failed.",
-		Remediations: []app.Remediation{{
-			Kind: "retry", Summary: "Review the typed issue and retry the explicit command.", SafeForYes: false,
-		}},
-	}
-	result.Outcome = app.OutcomeFailed
-	result.ExitCode = app.ExitForIssue(code)
-	result.Summary = issue.Summary
-	result.Issues = []app.Issue{issue}
-	return result
 }
 
-func extractFlag(args []string, flag string) (bool, []string) {
-	found := false
-	filtered := make([]string, 0, len(args))
-	for _, arg := range args {
-		if arg == flag {
-			found = true
+func invocationDomain(code app.IssueCode) string {
+	switch code {
+	case app.IssueConsentDeclined, app.IssueManualApproval, app.IssuePolicyBlocked:
+		return "policy"
+	case app.IssueInternal:
+		return "internal"
+	default:
+		return "config"
+	}
+}
+
+func severityForOutcome(outcome app.Outcome) app.Severity {
+	if outcome == app.OutcomeCancelled {
+		return app.SeverityInfo
+	}
+	return app.SeverityError
+}
+
+func commandHint(args []string) app.Command {
+	tokens := make([]string, 0, len(args))
+	for _, argument := range args {
+		if strings.HasPrefix(argument, "-") {
 			continue
 		}
-		filtered = append(filtered, arg)
+		tokens = append(tokens, argument)
 	}
-	return found, filtered
+	if len(tokens) == 0 {
+		return ""
+	}
+	command, _, err := parseCommand(tokens)
+	if err != nil {
+		return ""
+	}
+	return command
 }
 
-func parseOperation(args []string) (app.Operation, bool) {
-	command := args[0]
-	arguments := args[1:]
-
-	switch command {
-	case "setup":
-		return operation(app.CommandSetup, arguments), true
-	case "status":
-		return operation(app.CommandStatus, arguments), true
-	case "doctor":
-		return operation(app.CommandDoctor, arguments), true
-	case "repair":
-		return operation(app.CommandRepair, arguments), true
-	case "verify":
-		return operation(app.CommandVerify, arguments), true
-	case "uninstall":
-		return operation(app.CommandUninstall, arguments), true
-	case "report":
-		return operation(app.CommandReport, arguments), true
-	case "models":
-		return parseNested(arguments, map[string]app.Command{
-			"list":      app.CommandModelsList,
-			"recommend": app.CommandModelsRecommend,
-			"install":   app.CommandModelsInstall,
-			"remove":    app.CommandModelsRemove,
-		})
-	case "vscode":
-		return parseNested(arguments, map[string]app.Command{
-			"configure": app.CommandVSCodeConfigure,
-			"open":      app.CommandVSCodeOpen,
-		})
-	case "update":
-		if contains(arguments, "--rollback") {
-			return operation(app.CommandUpdateRollback, arguments), true
-		}
-		return operation(app.CommandUpdate, arguments), true
-	default:
-		return app.Operation{}, false
-	}
-}
-
-func parseNested(arguments []string, commands map[string]app.Command) (app.Operation, bool) {
-	if len(arguments) == 0 {
-		return app.Operation{}, false
-	}
-	command, ok := commands[arguments[0]]
-	if !ok {
-		return app.Operation{}, false
-	}
-	return operation(command, arguments[1:]), true
-}
-
-func operation(command app.Command, arguments []string) app.Operation {
-	return app.Operation{Command: command, Arguments: append([]string(nil), arguments...)}
-}
-
-func contains(values []string, wanted string) bool {
-	for _, value := range values {
-		if value == wanted {
+func containsArg(args []string, wanted string) bool {
+	for _, value := range args {
+		if value == wanted || strings.HasPrefix(value, wanted+"=") {
 			return true
 		}
 	}
@@ -227,29 +234,45 @@ func printHelp(w io.Writer) {
 	fmt.Fprint(w, `Local AI Manager
 
 Usage:
-  local-ai <command> [options]
+  local-ai [global options] <command> [command options]
+  local-ai
+
+Running without a command opens the guided terminal interface.
 
 Commands:
-  setup                 Run or resume setup
-  status                Show component status
-  doctor                Diagnose problems without mutation
-  repair                Apply selected safe repairs
-  models list           List catalog models
-  models recommend      Recommend primary and fallback models
-  models install <id>   Install a catalog model
-  models remove <name>  Remove a selected model
-  vscode configure      Configure the Local AI profile
-  vscode open           Open the Local AI profile
-  verify                Run read-only verification
-  update [--rollback]   Update or restore the previous binary
-  uninstall             Remove manager-owned assets
-  report                Create a redacted support report
-  version               Print build metadata
-  help                  Show this help
+  setup                         Run or resume setup
+  status [--check-updates]      Show component status
+  doctor                        Diagnose problems without mutation
+  repair                        Apply selected documented safe repairs
+  models list                   List catalog models and installed state
+  models recommend              Recommend primary and fallback models
+  models install <catalog-id>   Install and verify a catalog model
+  models remove <name>          Remove an exact manager-owned model
+  vscode configure              Configure the Local AI profile
+  vscode open                   Open the Local AI profile
+  copilot configure             Configure the official Copilot CLI local launcher
+  copilot open                  Open the explicit offline Copilot CLI experience
+  verify                        Run read-only runtime and VS Code checks
+  update [--rollback]           Update or restore the previous binary
+  uninstall                     Remove manager-owned assets
+  report [--output <file>]      Create a privacy-allowlisted support report
+  version                       Print build metadata
+  help                          Show this help
 
 Global options:
-  --json                Emit a versioned JSON result for stable commands
+  --config <file>       Load local-ai.config/v1 JSON
+  --yes, -y             Accept documented non-destructive defaults only
+  --json                Emit newline-delimited local-ai.event-stream/v1 records
+  --dry-run             Discover and plan without host mutation
+  --resume              Resume the latest compatible transaction
+  --restart             Archive it and begin a new transaction
+  --model <catalog-id>  Override the configured catalog model
+  --endpoint <url>      Override the loopback Ollama endpoint
+  --color <mode>        auto, always, or never
+  --no-color            Equivalent to --color never
 
-Commands without a configured domain service remain non-mutating placeholders.
+Protected VS Code trust, model selection, tool configuration, and approvals
+remain manual. Destructive uninstall flags require --confirm-destructive even
+when --yes is supplied.
 `)
 }

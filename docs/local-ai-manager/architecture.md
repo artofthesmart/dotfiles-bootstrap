@@ -33,6 +33,7 @@ The manager is not part of the dotfiles bootstrap. It must not call or modify `b
 | `internal/catalog` | Catalog validation, eligibility, deterministic scoring, exclusions, and explanations | Network mutation or unreviewed catalog updates |
 | `internal/ollama` | Registry/API clients, bounded GGUF metadata, service behavior, acquisition, aliases, context/offload and tool verification | Selecting cloud fallback or changing GPU drivers |
 | `internal/vscode` | Supported CLI discovery, version/profile/extension checks, open behavior, and UI handoff | Editing undocumented profile storage, workspace trust, or approvals |
+| `internal/copilot` | Official Copilot CLI lifecycle, manager-owned offline launcher, and typed CLI readiness/open behavior | Model-generated tool execution, approval bypass, or undocumented VS Code storage edits |
 | `internal/install` | Official installers, HTTPS-only redirect policy, integrity hooks, progress, and rerun safety | Silent elevation or disabling OS protections |
 | `internal/update` | Verified release selection, atomic replacement, one rollback copy | Background or silent updating |
 | `internal/cli` | Flags, config precedence, subcommands, event writer, and exit mapping | Business decisions |
@@ -100,6 +101,8 @@ Each step declares:
 | `models install`, `models remove` | `ollama` | Yes |
 | `vscode configure` | `vscode` | Yes |
 | `vscode open` | `vscode` | No, except an explicit supported profile-creation plan |
+| `copilot configure` | `copilot` | Yes |
+| `copilot open` | `copilot` | No |
 | `verify` | `app` verification policy | No |
 | `update`, `update --rollback` | `update` | Yes |
 | `uninstall` | `install` plus ownership policy | Yes |
@@ -108,7 +111,7 @@ Each step declares:
 ## Configuration and output
 
 - Configuration files conform to [config v1](../../schemas/local-ai-manager/config-v1.schema.json).
-- Precedence is command line, then config file, then platform-aware defaults.
+- Precedence is platform-aware defaults, then config file, then the explicit environment allowlist, then command line.
+- The environment allowlist is `LOCAL_AI_CONFIG`, `LOCAL_AI_OLLAMA_ENDPOINT`, `LOCAL_AI_VERIFY_ATTESTATION`, and `NO_COLOR`. No arbitrary environment values are copied into configuration, state, events, results, or reports.
 - JSON mode emits one JSON object per line conforming to [event/result stream v1](../../schemas/local-ai-manager/event-stream-v1.schema.json). Exactly one final `result` record is required.
 - Human output may change presentation, but stable issue codes, exit codes, command names, schema discriminators, and semantic outcomes follow [the issue and exit contract](issue-and-exit-codes.md).
-

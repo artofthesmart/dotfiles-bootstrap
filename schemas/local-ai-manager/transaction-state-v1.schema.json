@@ -39,6 +39,7 @@
         "models_install",
         "models_remove",
         "vscode_configure",
+        "copilot_configure",
         "update",
         "update_rollback",
         "uninstall"

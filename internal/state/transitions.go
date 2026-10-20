@@ -76,7 +76,7 @@ func (t *Transaction) Transition(to TransactionStatus, now time.Time) error {
 
 func CommandFamily(command Command) string {
 	switch command {
-	case CommandSetup, CommandRepair, CommandVSCodeConfigure:
+	case CommandSetup, CommandRepair, CommandVSCodeConfigure, CommandCopilotConfigure:
 		return "environment"
 	case CommandModelsInstall, CommandModelsRemove:
 		return "models"

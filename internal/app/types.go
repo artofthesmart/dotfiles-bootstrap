@@ -7,21 +7,23 @@ const EventSchemaVersion = "local-ai.event-stream/v1"
 type Command string
 
 const (
-	CommandSetup           Command = "setup"
-	CommandStatus          Command = "status"
-	CommandDoctor          Command = "doctor"
-	CommandRepair          Command = "repair"
-	CommandModelsList      Command = "models_list"
-	CommandModelsRecommend Command = "models_recommend"
-	CommandModelsInstall   Command = "models_install"
-	CommandModelsRemove    Command = "models_remove"
-	CommandVSCodeConfigure Command = "vscode_configure"
-	CommandVSCodeOpen      Command = "vscode_open"
-	CommandVerify          Command = "verify"
-	CommandUpdate          Command = "update"
-	CommandUpdateRollback  Command = "update_rollback"
-	CommandUninstall       Command = "uninstall"
-	CommandReport          Command = "report"
+	CommandSetup            Command = "setup"
+	CommandStatus           Command = "status"
+	CommandDoctor           Command = "doctor"
+	CommandRepair           Command = "repair"
+	CommandModelsList       Command = "models_list"
+	CommandModelsRecommend  Command = "models_recommend"
+	CommandModelsInstall    Command = "models_install"
+	CommandModelsRemove     Command = "models_remove"
+	CommandVSCodeConfigure  Command = "vscode_configure"
+	CommandVSCodeOpen       Command = "vscode_open"
+	CommandCopilotConfigure Command = "copilot_configure"
+	CommandCopilotOpen      Command = "copilot_open"
+	CommandVerify           Command = "verify"
+	CommandUpdate           Command = "update"
+	CommandUpdateRollback   Command = "update_rollback"
+	CommandUninstall        Command = "uninstall"
+	CommandReport           Command = "report"
 )
 
 type ExitCode int
@@ -163,6 +165,27 @@ type Result struct {
 type Operation struct {
 	Command   Command
 	Arguments []string
+	Config    Config
+	Yes       bool
+	DryRun    bool
+	Resume    bool
+	Restart   bool
+	Options   OperationOptions
+	Events    EventSink
+}
+
+type OperationOptions struct {
+	Repository            string
+	OutputPath            string
+	ManualCompleted       bool
+	CheckUpdates          bool
+	Rollback              bool
+	RemoveAliases         bool
+	RemoveModels          bool
+	RemoveVSCodeExtension bool
+	RemoveVSCode          bool
+	RemoveOllama          bool
+	ConfirmDestructive    bool
 }
 
 type BuildInfo struct {
