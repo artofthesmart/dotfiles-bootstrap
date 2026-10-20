@@ -20,9 +20,9 @@ func main() {
 		Stdout:  os.Stdout,
 		Stderr:  os.Stderr,
 		Clock:   platform.SystemClock{},
-		FS:      platform.UnavailableFileSystem{},
-		Runner:  platform.UnavailableRunner{},
-		Network: platform.UnavailableNetwork{},
+		FS:      platform.OSFileSystem{},
+		Runner:  platform.NewCommandRunner(),
+		Network: platform.NewHTTPNetwork(),
 		Build: app.BuildInfo{
 			Version: Version,
 			Commit:  Commit,

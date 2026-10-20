@@ -114,8 +114,10 @@ func (r *ScriptedRunner) Remaining() int {
 
 func cloneCommandResult(result platform.CommandResult) platform.CommandResult {
 	return platform.CommandResult{
-		ExitCode: result.ExitCode,
-		Stdout:   append([]byte(nil), result.Stdout...),
-		Stderr:   append([]byte(nil), result.Stderr...),
+		ExitCode:        result.ExitCode,
+		Stdout:          append([]byte(nil), result.Stdout...),
+		Stderr:          append([]byte(nil), result.Stderr...),
+		StdoutTruncated: result.StdoutTruncated,
+		StderrTruncated: result.StderrTruncated,
 	}
 }

@@ -18,9 +18,10 @@ import (
 )
 
 var (
-	_ platform.FileSystem = (*MemoryFileSystem)(nil)
-	_ platform.Runner     = (*ScriptedRunner)(nil)
-	_ platform.Network    = (*ScriptedNetwork)(nil)
+	_ platform.FileSystem       = (*MemoryFileSystem)(nil)
+	_ platform.AtomicFileSystem = (*MemoryFileSystem)(nil)
+	_ platform.Runner           = (*ScriptedRunner)(nil)
+	_ platform.Network          = (*ScriptedNetwork)(nil)
 )
 
 func TestMemoryFileSystemModelsAtomicRenamePermissionsAndSync(t *testing.T) {

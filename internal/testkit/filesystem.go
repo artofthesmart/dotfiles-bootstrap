@@ -136,6 +136,23 @@ func (m *MemoryFileSystem) WriteFile(name string, data []byte, mode fs.FileMode)
 	return nil
 }
 
+func (m *MemoryFileSystem) WriteFileAtomic(name string, data []byte, mode fs.FileMode) error {
+	temporary := name + ".partial"
+	if err := m.WriteFile(temporary, data, mode); err != nil {
+		return err
+	}
+	if err := m.Sync(temporary); err != nil {
+		return err
+	}
+	if err := m.Rename(temporary, name); err != nil {
+		return err
+	}
+	if err := m.Sync(name); err != nil {
+		return err
+	}
+	return m.Sync(path.Dir(name))
+}
+
 func (m *MemoryFileSystem) MkdirAll(name string, mode fs.FileMode) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

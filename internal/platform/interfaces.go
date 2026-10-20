@@ -18,18 +18,27 @@ type FileSystem interface {
 	Sync(string) error
 }
 
+type AtomicFileSystem interface {
+	FileSystem
+	WriteFileAtomic(string, []byte, fs.FileMode) error
+}
+
 type Command struct {
-	Name  string
-	Args  []string
-	Dir   string
-	Env   []string
-	Stdin io.Reader
+	Name        string
+	Args        []string
+	Dir         string
+	Env         []string
+	Stdin       io.Reader
+	Timeout     time.Duration
+	OutputLimit int64
 }
 
 type CommandResult struct {
-	ExitCode int
-	Stdout   []byte
-	Stderr   []byte
+	ExitCode        int
+	Stdout          []byte
+	Stderr          []byte
+	StdoutTruncated bool
+	StderrTruncated bool
 }
 
 type Runner interface {
@@ -37,10 +46,12 @@ type Runner interface {
 }
 
 type Request struct {
-	Method  string
-	URL     string
-	Headers map[string]string
-	Body    io.Reader
+	Method           string
+	URL              string
+	Headers          map[string]string
+	Body             io.Reader
+	Timeout          time.Duration
+	MaxResponseBytes int64
 }
 
 type Response struct {
@@ -54,9 +65,62 @@ type Network interface {
 }
 
 type Capabilities struct {
-	FileSystem FileSystem
-	Runner     Runner
-	Network    Network
+	FileSystem   FileSystem
+	Runner       Runner
+	Network      Network
+	Paths        PathProvider
+	Applications ApplicationLocator
+	Processes    ProcessManager
+	Services     ServiceController
+}
+
+type UserPaths struct {
+	Home      string
+	ConfigDir string
+	DataDir   string
+	CacheDir  string
+	BinDir    string
+	TempDir   string
+}
+
+type PathProvider interface {
+	UserPaths() (UserPaths, error)
+}
+
+type Application struct {
+	Name       string
+	Executable string
+	Source     string
+}
+
+type ApplicationLocator interface {
+	FindExecutable(string) (Application, error)
+	FindApplication(string) (Application, error)
+}
+
+type ProcessState struct {
+	PID     int
+	Running bool
+}
+
+type ProcessManager interface {
+	Start(context.Context, Command) (ProcessState, error)
+	Inspect(int) (ProcessState, error)
+	Terminate(context.Context, int) error
+}
+
+type ServiceState string
+
+const (
+	ServiceUnknown ServiceState = "unknown"
+	ServiceStopped ServiceState = "stopped"
+	ServiceRunning ServiceState = "running"
+)
+
+type ServiceController interface {
+	Status(context.Context, string) (ServiceState, error)
+	Start(context.Context, string) error
+	Stop(context.Context, string) error
 }
 
 type SystemClock struct{}
