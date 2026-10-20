@@ -23,6 +23,8 @@ The release-embedded reviewed data is in [`catalog/models.json`](../../catalog/m
 
 User-local bootstrap, explicit update/rollback, PATH ownership, and friend-preview signing limitations are defined in [manager self-deployment](self-deployment.md).
 
+`internal/ollama` implements the production Ollama domain behind later CLI/TUI adapters: bounded loopback API calls, HTTPS-only exact-manifest and GGUF range inspection, exact-tag reuse/acquisition, local GGUF import, safe 65,536-token aliases, live structured-tool and `/api/ps` verification, diagnosis and consent-aware repair planning, ownership-safe removal, and resumable state-engine steps.
+
 ## Versioning policy
 
 The contract version and each schema discriminator are independent of the application version.
