@@ -27,14 +27,13 @@ bash ./scripts/setup-local-ai.sh
    VS Code must be version 1.127 or newer. If needed, the wizard offers a small
    private installation of the jq JSON utility; no Python or Homebrew is needed.
 2. **Choose a sensible model.** Review the displayed hardware-only prompt, then
-   paste it into Gemini yourself. Nothing is sent automatically. Ask for a
-   tool-capable local coding model, an exact Ollama Library tag, download link,
-   size, context budget, and smaller fallback. Return with the recommendation;
-   advice is a starting point, not a guarantee of an optimal model.
-3. **Verify and download.** Paste Gemini's model, size estimate and context into
-   the wizard. Before a large pull, it checks the exact registry tag, actual
-   layer size, GGUF context limit and free disk, then shows a final review.
-   A known 32K tag is rejected before download. Already-installed models are
+   paste it into Gemini yourself. Nothing is sent automatically. The wizard
+   first checks a small exact-tag catalog and includes only entries with verified
+   65K+ GGUF context metadata. Gemini must choose from that list or return
+   `MODEL: NONE`; it still compares hardware fit and suggests a smaller fallback.
+3. **Verify and download.** Paste Gemini's exact listed model, size and `65536`
+   into the wizard. Out-of-catalog tags are rejected before download. It checks
+   free disk and shows a final review. Already-installed models are
    reused without updating. The downloaded model also appears in Ollama.
    The wizard checks advertised tools and a harmless structured tool call.
 4. **Open your repository.** The wizard installs official Chat/Ollama extensions

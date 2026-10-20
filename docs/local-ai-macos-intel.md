@@ -29,15 +29,14 @@ bash ./scripts/setup-local-ai.sh
    Python and Homebrew are not prerequisites.
 2. **Ask Gemini what fits.** Review the hardware-only prompt before copying it
    into Gemini yourself. It contains CPU, RAM, GPU limitations and available
-   storage, not repository contents. It asks for an exact local Ollama Library
-   model tag and download link, a smaller fallback, storage needs, license
-   caveats and an agent context budget. Emphasize **CPU-only Intel Mac**.
+   storage, not repository contents. The wizard first verifies a small exact-tag
+   catalog with 65K+ GGUF context; Gemini must choose from that list or return
+   `MODEL: NONE`. It compares CPU-only fit, a smaller fallback and license caveats.
    No information is sent automatically; Gemini's recommendation is not proof
    that a model will be fast or useful.
-3. **Verify and download.** Paste Gemini's model, size estimate and context into
-   the wizard. It independently checks the exact registry tag, actual layer
-   size, GGUF context limit and free disk before a large pull. A known 32K tag
-   is rejected before download. Installed models are reused without updating;
+3. **Verify and download.** Paste Gemini's exact listed model, size and `65536`
+   into the wizard. Out-of-catalog tags are rejected before download. The wizard
+   checks free disk and shows a final review. Installed models are reused without updating;
    new downloads also appear in Ollama. The wizard then checks advertised tools
    and a harmless structured tool call. CPU-only performance may still be poor.
 4. **Use the Local AI profile.** The wizard installs official Chat/Ollama
