@@ -38,6 +38,14 @@ func parseInvocation(args []string) (parsedInvocation, error) {
 	var parsed parsedInvocation
 	for index := 0; index < len(args); index++ {
 		argument := args[index]
+		if len(parsed.commandTokens) >= 2 && parsed.commandTokens[0] == "copilot" && parsed.commandTokens[1] == "open" {
+			parsed.commandTokens = append(parsed.commandTokens, argument)
+			continue
+		}
+		if argument == "--" {
+			parsed.commandTokens = append(parsed.commandTokens, args[index+1:]...)
+			break
+		}
 		name, inline, hasInline := strings.Cut(argument, "=")
 		switch name {
 		case "--help", "-h":
@@ -166,7 +174,7 @@ func (parsed parsedInvocation) operation(config app.Config) (app.Operation, erro
 		}
 	case app.CommandStatus, app.CommandDoctor, app.CommandRepair, app.CommandModelsList,
 		app.CommandModelsRecommend, app.CommandVSCodeConfigure, app.CommandVSCodeOpen,
-		app.CommandCopilotConfigure, app.CommandCopilotOpen,
+		app.CommandCopilotConfigure,
 		app.CommandVerify, app.CommandUpdate, app.CommandUpdateRollback, app.CommandUninstall,
 		app.CommandReport, app.CommandSetup:
 		if len(arguments) != 0 {

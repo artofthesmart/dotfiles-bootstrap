@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"path/filepath"
 	"runtime"
@@ -494,6 +495,39 @@ func (manager *Manager) Uninstall(ctx context.Context, assets []state.ManagedAss
 	return manager.saveMarker(paths, marker)
 }
 
+func (manager *Manager) Open(ctx context.Context, request Request, arguments []string, input io.Reader, output, errorOutput io.Writer) error {
+	status, err := manager.Status(ctx, request)
+	if err != nil && len(status.Issues) == 0 {
+		return err
+	}
+	if len(status.Issues) > 0 {
+		first := status.Issues[0]
+		return copilotError(first.Code, "open Copilot local launcher", errors.New(first.Summary))
+	}
+	if status.LauncherOwnership != state.OwnershipManagerOwned {
+		return copilotError(app.IssueAssetOwnership, "open Copilot local launcher", errors.New("manager ownership is not proven"))
+	}
+	paths, err := manager.platform.Paths.UserPaths()
+	if err != nil {
+		return copilotError(app.IssueStateWrite, "resolve Copilot launcher path", err)
+	}
+	result, err := manager.platform.Runner.Run(ctx, platform.Command{
+		Name:      LauncherPath(paths, manager.goos),
+		Args:      append([]string(nil), arguments...),
+		Stdin:     input,
+		Stdout:    output,
+		Stderr:    errorOutput,
+		NoTimeout: true,
+	})
+	if err != nil {
+		return copilotError(app.IssueCopilotLauncher, "execute Copilot local launcher", err)
+	}
+	if result.ExitCode != 0 {
+		return copilotError(app.IssueCopilotLauncher, "execute Copilot local launcher", fmt.Errorf("launcher exited with code %d", result.ExitCode))
+	}
+	return nil
+}
+
 func (manager *Manager) inspect(ctx context.Context, request Request) (inspection, error) {
 	result := inspection{Status: Status{
 		MinimumVersion:  MinimumVersion,
@@ -707,6 +741,8 @@ func diagnoseStatus(status Status) []app.Issue {
 	}
 	if !status.LauncherPresent || !status.LauncherValid {
 		add(app.IssueCopilotLauncher, "The manager-owned copilot-local launcher is missing or does not match the selected alias.", "repair.copilot.launcher", true)
+	} else if status.LauncherOwnership != state.OwnershipManagerOwned {
+		add(app.IssueAssetOwnership, "The copilot-local launcher exists but manager ownership is not proven.", "repair.copilot.launcher", false)
 	}
 	return issues
 }

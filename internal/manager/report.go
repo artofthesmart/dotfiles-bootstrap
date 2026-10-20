@@ -21,6 +21,7 @@ type supportReport struct {
 	SchemaVersion string               `json:"schema_version"`
 	Manager       map[string]any       `json:"manager"`
 	Hardware      map[string]any       `json:"hardware,omitempty"`
+	Copilot       map[string]any       `json:"copilot,omitempty"`
 	IssueCodes    []app.IssueCode      `json:"issue_codes"`
 	Transactions  []supportTransaction `json:"transactions"`
 }
@@ -69,6 +70,26 @@ func (service Service) report(ctx context.Context, operation app.Operation) app.
 		}
 	} else if !errors.Is(err, state.ErrNoState) {
 		return service.errorResult(operation.Command, err)
+	}
+	if service.Copilot != nil {
+		alias := aliasFromTransaction(transaction)
+		if alias == "" && operation.Config.Model.CatalogID != "" {
+			alias = aliasFor(operation.Config.Model.CatalogID)
+		}
+		diagnosis := service.Copilot.Diagnose(ctx, service.copilotRequest(operation, transaction, alias))
+		report.Copilot = map[string]any{
+			"copilot_present":   diagnosis.Status.CopilotPresent,
+			"version_supported": diagnosis.Status.VersionSupported,
+			"launcher_present":  diagnosis.Status.LauncherPresent,
+			"launcher_valid":    diagnosis.Status.LauncherValid,
+			"offline_enforced":  diagnosis.Status.OfflineEnforced,
+			"alias_ready":       diagnosis.Status.AliasReady,
+		}
+		if operation.Config.Report.IncludeRecentIssueCodes {
+			for _, value := range diagnosis.Issues {
+				report.IssueCodes = append(report.IssueCodes, value.Code)
+			}
+		}
 	}
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {

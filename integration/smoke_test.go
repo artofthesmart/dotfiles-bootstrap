@@ -72,6 +72,17 @@ func TestRealBinaryStableReadOnlyCommandsDoNotMutateOutsideSandbox(t *testing.T)
 		}
 	}
 	assertCommand(t, paths, guard, []string{"status", "--endpoint", "https://example.com"}, int(app.ExitConfigurationFailure), "configuration")
+	copilotOutput := assertCommand(t, paths, guard,
+		[]string{"--dry-run", "--json", "copilot", "open", "--help", "prompt with spaces"},
+		int(app.ExitRuntimeVerificationFailure), string(app.IssueCopilotAlias))
+	copilotLines := strings.Split(strings.TrimSpace(string(copilotOutput)), "\n")
+	var copilotResult app.Result
+	if err := json.Unmarshal([]byte(copilotLines[len(copilotLines)-1]), &copilotResult); err != nil {
+		t.Fatalf("copilot open did not emit a valid result: %v\n%s", err, copilotOutput)
+	}
+	if copilotResult.Command != app.CommandCopilotOpen || copilotResult.Issues[0].Code != app.IssueCopilotAlias {
+		t.Fatalf("copilot result = %#v", copilotResult)
+	}
 
 	after := snapshot(t, guard)
 	if !equalSnapshots(before, after) {

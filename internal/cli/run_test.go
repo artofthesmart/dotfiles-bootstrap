@@ -180,6 +180,7 @@ func TestRepresentativeCommandDispatch(t *testing.T) {
 		{[]string{"uninstall", "--remove-models", "--confirm-destructive"}, app.CommandUninstall, ""},
 		{[]string{"report", "--output", "report.json"}, app.CommandReport, ""},
 	}
+
 	for _, test := range tests {
 		t.Run(strings.Join(test.args, "_"), func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
@@ -195,6 +196,23 @@ func TestRepresentativeCommandDispatch(t *testing.T) {
 				t.Fatalf("arguments = %#v", operation.Arguments)
 			}
 		})
+	}
+}
+
+func TestCopilotOpenPreservesAllFollowingArguments(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	service := &recordingService{}
+	arguments := []string{"--json", "--dry-run", "copilot", "open", "--help", "prompt with spaces", "--flag=value", `literal"$*'argument`}
+	if exit := Run(context.Background(), arguments, testDependencies(&stdout, &stderr, service)); exit != 0 {
+		t.Fatalf("exit = %d, stderr = %s", exit, stderr.String())
+	}
+	operation := service.operations[0]
+	want := []string{"--help", "prompt with spaces", "--flag=value", `literal"$*'argument`}
+	if strings.Join(operation.Arguments, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("arguments = %#v, want %#v", operation.Arguments, want)
+	}
+	if !operation.DryRun || operation.Output != &stderr {
+		t.Fatalf("operation streams/options = %#v", operation)
 	}
 }
 

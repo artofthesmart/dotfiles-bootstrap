@@ -93,8 +93,9 @@ func main() {
 					Clock: clock, Build: build, FileSystem: filesystem, Paths: paths,
 					Hardware: newHardwareDiscoverer(filesystem, runner, userPaths.Home),
 					Catalog:  repository, Ollama: ollamaManager, OllamaFactory: ollamaFactory,
-					VSCode: vscode.NewManager(vscode.Options{Platform: capabilities, Clock: clock}),
-					State:  transactionStore, Updater: selfUpdater,
+					VSCode:  vscode.NewManager(vscode.Options{Platform: capabilities, Clock: clock}),
+					Copilot: manager.CopilotAdapter{Platform: capabilities, Clock: clock},
+					State:   transactionStore, Updater: selfUpdater,
 					UpdaterFactory: updaterFactory,
 					Uninstaller: install.Uninstaller{
 						FileSystem: filesystem, Paths: paths, State: deploymentStore, Clock: clock,

@@ -102,6 +102,12 @@ func Run(ctx context.Context, args []string, deps Dependencies) int {
 	}
 
 	jsonMode := config.Behavior.Output == "json"
+	operation.Input = deps.Stdin
+	operation.Output = deps.Stdout
+	operation.Error = deps.Stderr
+	if jsonMode {
+		operation.Output = deps.Stderr
+	}
 	var stream *jsonStream
 	if jsonMode {
 		stream = newJSONStream(deps.Stdout)
@@ -251,7 +257,7 @@ Commands:
   vscode configure              Configure the Local AI profile
   vscode open                   Open the Local AI profile
   copilot configure             Configure the official Copilot CLI local launcher
-  copilot open                  Open the explicit offline Copilot CLI experience
+  copilot open [args...]        Run the verified offline launcher with unchanged arguments
   verify                        Run read-only runtime and VS Code checks
   update [--rollback]           Update or restore the previous binary
   uninstall                     Remove manager-owned assets
@@ -273,6 +279,7 @@ Global options:
 
 Protected VS Code trust, model selection, tool configuration, and approvals
 remain manual. Destructive uninstall flags require --confirm-destructive even
-when --yes is supplied.
+when --yes is supplied. Place manager options before 'copilot open'; all later
+arguments are forwarded unchanged to the verified launcher.
 `)
 }

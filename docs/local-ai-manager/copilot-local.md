@@ -35,3 +35,5 @@ Primary sources:
 8. resumes interrupted state-engine operations from privacy-safe ownership receipts and removes only manager-owned Copilot assets.
 
 The launcher contains no cloud endpoint and offline mode is mandatory. A local-provider failure is returned as a failure; the manager does not select a GitHub-hosted model.
+
+`local-ai setup` verifies the Ollama alias before configuring the supported VS Code surface and the Copilot launcher. `local-ai copilot configure` uses the same resumable transaction steps independently. `local-ai copilot open [args...]` verifies manager ownership and the complete offline provider contract before execution; manager flags must precede `copilot open`, and every following argument is passed to the launcher unchanged.

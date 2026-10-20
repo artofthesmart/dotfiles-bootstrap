@@ -1,6 +1,9 @@
 package app
 
-import "time"
+import (
+	"io"
+	"time"
+)
 
 const EventSchemaVersion = "local-ai.event-stream/v1"
 
@@ -178,6 +181,9 @@ type Operation struct {
 	Restart   bool
 	Options   OperationOptions
 	Events    EventSink
+	Input     io.Reader
+	Output    io.Writer
+	Error     io.Writer
 }
 
 type OperationOptions struct {

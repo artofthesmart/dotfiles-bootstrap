@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os/exec"
 	"time"
 )
@@ -43,10 +44,12 @@ func (runner CommandRunner) Run(ctx context.Context, command Command) (CommandRe
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, command.Timeout)
 		defer cancel()
-	} else if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, DefaultCommandTimeout)
-		defer cancel()
+	} else if !command.NoTimeout {
+		if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, DefaultCommandTimeout)
+			defer cancel()
+		}
 	}
 	limit := command.OutputLimit
 	if limit <= 0 {
@@ -58,8 +61,8 @@ func (runner CommandRunner) Run(ctx context.Context, command Command) (CommandRe
 	process.Dir = command.Dir
 	process.Env = runner.Environment.Build(command.Env)
 	process.Stdin = command.Stdin
-	process.Stdout = stdout
-	process.Stderr = stderr
+	process.Stdout = commandOutput(stdout, command.Stdout)
+	process.Stderr = commandOutput(stderr, command.Stderr)
 	err := process.Run()
 	result := CommandResult{
 		ExitCode:        0,
@@ -86,6 +89,13 @@ func (runner CommandRunner) Run(ctx context.Context, command Command) (CommandRe
 	}
 	result.ExitCode = -1
 	return result, &CommandStartError{Name: command.Name, Err: err}
+}
+
+func commandOutput(capture io.Writer, output io.Writer) io.Writer {
+	if output == nil {
+		return capture
+	}
+	return io.MultiWriter(capture, output)
 }
 
 type boundedBuffer struct {

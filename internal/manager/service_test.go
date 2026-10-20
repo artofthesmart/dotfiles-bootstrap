@@ -1,15 +1,21 @@
 package manager
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/app"
+	"github.com/artofthesmart/dotfiles-bootstrap/internal/copilot"
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/hardware"
+	"github.com/artofthesmart/dotfiles-bootstrap/internal/install"
+	"github.com/artofthesmart/dotfiles-bootstrap/internal/ollama"
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/state"
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/testkit"
+	"github.com/artofthesmart/dotfiles-bootstrap/internal/vscode"
 )
 
 var managerTestTime = time.Date(2026, time.October, 20, 20, 0, 0, 0, time.UTC)
@@ -68,6 +74,78 @@ type panicStore struct{}
 
 func (panicStore) Load(context.Context) (state.Transaction, error) {
 	panic("dry run must not load state")
+}
+
+type noStatePanicMutationStore struct{}
+
+func (noStatePanicMutationStore) Load(context.Context) (state.Transaction, error) {
+	return state.Transaction{}, state.ErrNoState
+}
+func (noStatePanicMutationStore) Save(context.Context, *state.Transaction) error {
+	panic("dry run must not save state")
+}
+func (noStatePanicMutationStore) Archive(context.Context) (state.StateLocator, error) {
+	panic("dry run must not archive state")
+}
+
+type fixedStore struct {
+	transaction state.Transaction
+}
+
+func (store fixedStore) Load(context.Context) (state.Transaction, error) {
+	return store.transaction, nil
+}
+func (fixedStore) Save(context.Context, *state.Transaction) error { return nil }
+func (fixedStore) Archive(context.Context) (state.StateLocator, error) {
+	return state.StateLocator{}, nil
+}
+
+type fakeCopilotLifecycle struct {
+	steps           []state.Step
+	status          copilot.Status
+	statusErr       error
+	diagnosis       copilot.Diagnosis
+	requests        []copilot.Request
+	openCalls       int
+	openArguments   []string
+	openInput       io.Reader
+	openOutput      io.Writer
+	openError       io.Writer
+	uninstallAssets []state.ManagedAsset
+}
+
+func (lifecycle *fakeCopilotLifecycle) ConfigureSteps(request copilot.Request) ([]state.Step, error) {
+	lifecycle.requests = append(lifecycle.requests, request)
+	return lifecycle.steps, nil
+}
+
+func (lifecycle *fakeCopilotLifecycle) Status(context.Context, copilot.Request) (copilot.Status, error) {
+	return lifecycle.status, lifecycle.statusErr
+}
+
+func (lifecycle *fakeCopilotLifecycle) Diagnose(context.Context, copilot.Request) copilot.Diagnosis {
+	return lifecycle.diagnosis
+}
+
+func (lifecycle *fakeCopilotLifecycle) Open(_ context.Context, _ copilot.Request, arguments []string, input io.Reader, output, errorOutput io.Writer) error {
+	lifecycle.openCalls++
+	lifecycle.openArguments = append([]string(nil), arguments...)
+	lifecycle.openInput, lifecycle.openOutput, lifecycle.openError = input, output, errorOutput
+	return nil
+}
+
+func (lifecycle *fakeCopilotLifecycle) Uninstall(_ context.Context, assets []state.ManagedAsset) error {
+	lifecycle.uninstallAssets = append([]state.ManagedAsset(nil), assets...)
+	return nil
+}
+
+type fakeUninstaller struct {
+	assets []state.ManagedAsset
+}
+
+func (uninstaller *fakeUninstaller) Uninstall(_ context.Context, assets []state.ManagedAsset, _ install.UninstallOptions) (state.DeploymentReceipt, error) {
+	uninstaller.assets = append([]state.ManagedAsset(nil), assets...)
+	return state.DeploymentReceipt{}, nil
 }
 func (panicStore) Save(context.Context, *state.Transaction) error {
 	panic("dry run must not save state")
@@ -153,9 +231,14 @@ func TestCancellationMapsToStableCancelledResult(t *testing.T) {
 
 func TestSupportReportIsAllowlistedAndRedacted(t *testing.T) {
 	filesystem := testkit.NewMemoryFileSystem("/sandbox", nil)
+	lifecycle := &fakeCopilotLifecycle{diagnosis: copilot.Diagnosis{
+		Status: copilot.Status{CopilotPresent: true, VersionSupported: true, LauncherPresent: true, LauncherValid: true, OfflineEnforced: true, AliasReady: true},
+		Issues: []app.Issue{issue(app.IssueCopilotLauncher, app.SeverityError, "copilot", "redacted diagnostic")},
+	}}
 	service := Service{
 		Clock: managerClock{}, FileSystem: filesystem,
-		Build: app.BuildInfo{Version: "1.2.3", Commit: "token=super-secret"},
+		Build:   app.BuildInfo{Version: "1.2.3", Commit: "token=super-secret"},
+		Copilot: lifecycle,
 		Hardware: fakeDiscoverer{value: hardware.Capabilities{
 			OS:           hardware.OperatingSystem{Family: "linux", Distribution: "ubuntu", Version: "24.04-hostname-private"},
 			Architecture: "amd64",
@@ -184,7 +267,7 @@ func TestSupportReportIsAllowlistedAndRedacted(t *testing.T) {
 			t.Fatalf("report contains forbidden value %q:\n%s", forbidden, text)
 		}
 	}
-	for _, required := range []string{`"schema_version": "local-ai.support-report/v1"`, `"architecture": "amd64"`, `"system_memory_bytes"`} {
+	for _, required := range []string{`"schema_version": "local-ai.support-report/v1"`, `"architecture": "amd64"`, `"system_memory_bytes"`, `"copilot_present": true`, string(app.IssueCopilotLauncher)} {
 		if !strings.Contains(text, required) {
 			t.Fatalf("report missing %q:\n%s", required, text)
 		}
@@ -199,6 +282,181 @@ func TestCopilotCommandsUseTypedOptionalLifecycle(t *testing.T) {
 			t.Fatalf("%s result = %#v", command, result)
 		}
 	}
+}
+
+func TestCopilotConfigureUsesGeneratedAliasEndpointAndTransaction(t *testing.T) {
+	filesystem := testkit.NewMemoryFileSystem("/sandbox", nil)
+	step := consentStep()
+	lifecycle := &fakeCopilotLifecycle{steps: []state.Step{step}}
+	service := Service{
+		Clock: managerClock{}, Copilot: lifecycle, Hardware: fakeDiscoverer{value: supportedCapabilities()},
+		State: state.JSONStore{
+			FileSystem: filesystem, Path: "/sandbox/state/transaction.json",
+			PrivacySafePath: "${HOME}/state/transaction.json", ArchivePrivacyPrefix: "${HOME}/state/archive",
+		},
+		Build: app.BuildInfo{Version: "1.2.3"},
+	}
+	config := app.DefaultConfig()
+	config.Model.CatalogID = "qwen.test"
+	config.Ollama.Endpoint = "http://127.0.0.1:11435"
+	result := service.Execute(context.Background(), app.Operation{
+		Command: app.CommandCopilotConfigure, Config: config, Yes: true,
+	})
+	if result.ExitCode != app.ExitSuccess || step.applies != 1 || step.verifies != 1 {
+		t.Fatalf("result = %#v, step = %#v", result, step)
+	}
+	if len(lifecycle.requests) != 1 || lifecycle.requests[0].Alias != "local-ai-qwen.test:latest" ||
+		lifecycle.requests[0].Endpoint != config.Ollama.Endpoint {
+		t.Fatalf("requests = %#v", lifecycle.requests)
+	}
+}
+
+func TestCopilotConfigureDryRunDoesNotMutate(t *testing.T) {
+	step := consentStep()
+	lifecycle := &fakeCopilotLifecycle{steps: []state.Step{step}}
+	service := Service{
+		Clock: managerClock{}, Copilot: lifecycle, Hardware: fakeDiscoverer{value: supportedCapabilities()},
+		State: noStatePanicMutationStore{},
+	}
+	config := app.DefaultConfig()
+	config.Model.CatalogID = "qwen.test"
+	result := service.Execute(context.Background(), app.Operation{
+		Command: app.CommandCopilotConfigure, Config: config, DryRun: true,
+	})
+	if result.ExitCode != app.ExitSuccess || step.checks != 1 || step.plans != 1 || step.applies != 0 || step.verifies != 0 {
+		t.Fatalf("result = %#v, step = %#v", result, step)
+	}
+}
+
+func TestCopilotOpenDryRunAndArgumentForwarding(t *testing.T) {
+	lifecycle := &fakeCopilotLifecycle{status: healthyCopilotStatus("local-ai-qwen.test:latest")}
+	service := Service{Clock: managerClock{}, Copilot: lifecycle, State: noStatePanicMutationStore{}}
+	config := app.DefaultConfig()
+	config.Model.CatalogID = "qwen.test"
+	arguments := []string{"prompt with spaces", "--flag=value", `literal"$*'argument`}
+	dryRun := service.Execute(context.Background(), app.Operation{
+		Command: app.CommandCopilotOpen, Config: config, DryRun: true, Arguments: arguments,
+	})
+	if dryRun.ExitCode != app.ExitSuccess || lifecycle.openCalls != 0 {
+		t.Fatalf("dry-run result = %#v, calls = %d", dryRun, lifecycle.openCalls)
+	}
+	var input bytes.Buffer
+	var output, errorOutput bytes.Buffer
+	result := service.Execute(context.Background(), app.Operation{
+		Command: app.CommandCopilotOpen, Config: config, Arguments: arguments,
+		Input: &input, Output: &output, Error: &errorOutput,
+	})
+	if result.ExitCode != app.ExitSuccess || lifecycle.openCalls != 1 {
+		t.Fatalf("result = %#v, calls = %d", result, lifecycle.openCalls)
+	}
+	if strings.Join(lifecycle.openArguments, "\x00") != strings.Join(arguments, "\x00") ||
+		lifecycle.openInput != &input || lifecycle.openOutput != &output || lifecycle.openError != &errorOutput {
+		t.Fatalf("forwarded open call = %#v", lifecycle)
+	}
+}
+
+func TestCopilotMissingAliasDiagnosticsRepairAndUninstall(t *testing.T) {
+	t.Run("missing alias", func(t *testing.T) {
+		service := Service{Clock: managerClock{}, Copilot: &fakeCopilotLifecycle{}, State: noStatePanicMutationStore{}, Hardware: fakeDiscoverer{value: supportedCapabilities()}}
+		result := service.Execute(context.Background(), app.Operation{Command: app.CommandCopilotConfigure, Config: app.DefaultConfig()})
+		if result.ExitCode != app.ExitRuntimeVerificationFailure || len(result.Issues) != 1 || result.Issues[0].Code != app.IssueCopilotAlias {
+			t.Fatalf("result = %#v", result)
+		}
+	})
+
+	t.Run("diagnostics and repair", func(t *testing.T) {
+		step := consentStep()
+		copilotIssue := issue(app.IssueCopilotLauncher, app.SeverityError, "copilot", "The launcher needs repair.")
+		lifecycle := &fakeCopilotLifecycle{
+			steps:  []state.Step{step},
+			status: copilot.Status{Alias: "local-ai-qwen.test:latest", Issues: []app.Issue{copilotIssue}},
+		}
+		service := Service{
+			Clock: managerClock{}, Copilot: lifecycle, State: noStatePanicMutationStore{},
+			Hardware: fakeDiscoverer{value: supportedCapabilities()},
+		}
+		config := app.DefaultConfig()
+		config.Model.CatalogID = "qwen.test"
+		doctor := service.Execute(context.Background(), app.Operation{Command: app.CommandDoctor, Config: config})
+		if doctor.ExitCode != app.ExitPrerequisiteFailure || !containsIssue(doctor.Issues, app.IssueCopilotLauncher) {
+			t.Fatalf("doctor = %#v", doctor)
+		}
+		repair := service.Execute(context.Background(), app.Operation{Command: app.CommandRepair, Config: config, DryRun: true})
+		if repair.ExitCode != app.ExitSuccess || step.plans != 1 {
+			t.Fatalf("repair = %#v, step = %#v", repair, step)
+		}
+	})
+
+	t.Run("ownership-aware uninstall", func(t *testing.T) {
+		copilotAsset := state.ManagedAsset{AssetType: state.AssetCopilotLauncher, Ownership: state.OwnershipManagerOwned}
+		managerAsset := state.ManagedAsset{AssetType: state.AssetManagerBinary, Ownership: state.OwnershipManagerOwned}
+		lifecycle := &fakeCopilotLifecycle{}
+		uninstaller := &fakeUninstaller{}
+		service := Service{
+			Clock: managerClock{}, Copilot: lifecycle, Uninstaller: uninstaller,
+			State: fixedStore{transaction: state.Transaction{ManagedAssets: []state.ManagedAsset{copilotAsset, managerAsset}}},
+		}
+		result := service.Execute(context.Background(), app.Operation{Command: app.CommandUninstall, Config: app.DefaultConfig()})
+		if result.ExitCode != app.ExitSuccess || len(lifecycle.uninstallAssets) != 2 {
+			t.Fatalf("result = %#v, copilot assets = %#v", result, lifecycle.uninstallAssets)
+		}
+		if len(uninstaller.assets) != 1 || uninstaller.assets[0].AssetType != state.AssetManagerBinary {
+			t.Fatalf("generic uninstall assets = %#v", uninstaller.assets)
+		}
+	})
+}
+
+func TestSetupSequencesCopilotAfterVerifiedAlias(t *testing.T) {
+	copilotStep := &scriptedStep{contract: state.StepContract{ID: "copilot.configure", Owner: state.OwnerCopilot, Action: "configure", Risk: state.RiskUserLocal, Reversible: true}}
+	lifecycle := &fakeCopilotLifecycle{steps: []state.Step{copilotStep}}
+	service := Service{Copilot: lifecycle, VSCode: &vscode.Manager{}}
+	config := app.DefaultConfig()
+	config.Ollama.Endpoint = "http://127.0.0.1:11435"
+	steps, err := service.setupLifecycleSteps(app.Operation{Config: config}, ollama.InstallRequest{
+		Source: ollama.SourceSpec{Kind: ollama.SourceRegistry, Reference: "example/model:latest"},
+		Alias:  "local-ai-example:latest",
+	}, state.Transaction{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifyIndex, copilotIndex := -1, -1
+	for index, step := range steps {
+		switch step.Contract().ID {
+		case ollama.StepVerifyModel:
+			verifyIndex = index
+		case "copilot.configure":
+			copilotIndex = index
+		}
+	}
+	manualIndex := -1
+	for index, step := range steps {
+		if step.Contract().ID == "vscode.complete-manual-handoff" {
+			manualIndex = index
+		}
+	}
+	if verifyIndex < 0 || copilotIndex <= verifyIndex || manualIndex <= copilotIndex {
+		t.Fatalf("step order verify=%d copilot=%d total=%d", verifyIndex, copilotIndex, len(steps))
+	}
+	if len(lifecycle.requests) != 1 || lifecycle.requests[0].Alias != "local-ai-example:latest" || lifecycle.requests[0].Endpoint != config.Ollama.Endpoint {
+		t.Fatalf("request = %#v", lifecycle.requests)
+	}
+}
+
+func healthyCopilotStatus(alias string) copilot.Status {
+	return copilot.Status{
+		CopilotPresent: true, VersionSupported: true, Alias: alias, AliasReady: true, OllamaReady: true,
+		LauncherPresent: true, LauncherValid: true, LauncherOwnership: state.OwnershipManagerOwned,
+		ProviderValid: true, OfflineEnforced: true, ProviderType: "openai", WireAPI: "responses",
+	}
+}
+
+func containsIssue(issues []app.Issue, code app.IssueCode) bool {
+	for _, value := range issues {
+		if value.Code == code {
+			return true
+		}
+	}
+	return false
 }
 
 func consentStep() *scriptedStep {

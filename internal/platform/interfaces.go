@@ -30,7 +30,10 @@ type Command struct {
 	Dir         string
 	Env         []string
 	Stdin       io.Reader
+	Stdout      io.Writer
+	Stderr      io.Writer
 	Timeout     time.Duration
+	NoTimeout   bool
 	OutputLimit int64
 }
 

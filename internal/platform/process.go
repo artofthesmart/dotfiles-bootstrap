@@ -25,6 +25,8 @@ func (manager OSProcessManager) Start(ctx context.Context, command Command) (Pro
 	process.Dir = command.Dir
 	process.Env = manager.Environment.Build(command.Env)
 	process.Stdin = command.Stdin
+	process.Stdout = command.Stdout
+	process.Stderr = command.Stderr
 	if err := process.Start(); err != nil {
 		return ProcessState{}, &CommandStartError{Name: command.Name, Err: err}
 	}

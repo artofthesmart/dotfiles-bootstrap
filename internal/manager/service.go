@@ -14,6 +14,7 @@ import (
 
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/app"
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/catalog"
+	"github.com/artofthesmart/dotfiles-bootstrap/internal/copilot"
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/hardware"
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/install"
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/ollama"
@@ -25,11 +26,6 @@ import (
 
 type Uninstaller interface {
 	Uninstall(context.Context, []state.ManagedAsset, install.UninstallOptions) (state.DeploymentReceipt, error)
-}
-
-type CopilotLifecycle interface {
-	Configure(context.Context, app.Operation) app.Result
-	Open(context.Context, app.Operation) app.Result
 }
 
 type Service struct {
@@ -82,15 +78,9 @@ func (service Service) Execute(ctx context.Context, operation app.Operation) app
 	case app.CommandVSCodeOpen:
 		return service.vscodeOpen(ctx, operation)
 	case app.CommandCopilotConfigure:
-		if service.Copilot == nil {
-			return service.failure(operation.Command, app.IssuePrerequisiteMissing, "The typed Copilot CLI lifecycle service is not integrated in this build.")
-		}
-		return service.Copilot.Configure(ctx, operation)
+		return service.copilotConfigure(ctx, operation)
 	case app.CommandCopilotOpen:
-		if service.Copilot == nil {
-			return service.failure(operation.Command, app.IssuePrerequisiteMissing, "The typed Copilot CLI lifecycle service is not integrated in this build.")
-		}
-		return service.Copilot.Open(ctx, operation)
+		return service.copilotOpen(ctx, operation)
 	case app.CommandVerify:
 		return service.verify(ctx, operation)
 	case app.CommandUpdate, app.CommandUpdateRollback:
@@ -117,11 +107,52 @@ func (service Service) setup(ctx context.Context, operation app.Operation) app.R
 		return *result
 	}
 	request := service.installRequest(operation, entry, capabilities)
-	steps := ollama.NewInstallSteps(service.Ollama, request)
-	steps = append(steps, vscode.LifecycleSteps(service.VSCode, vscode.Request{
-		Alias: aliasFor(entry.ID), Repository: operation.Options.Repository,
-	}, operation.Options.ManualCompleted)...)
+	transaction, _ := service.loadState(ctx)
+	steps, err := service.setupLifecycleSteps(operation, request, transaction)
+	if err != nil {
+		return service.errorResult(operation.Command, err)
+	}
 	return service.executeTransaction(ctx, operation, state.CommandSetup, steps, capabilities, &entry.ID, stringPointer(request.Alias))
+}
+
+func (service Service) setupLifecycleSteps(operation app.Operation, request ollama.InstallRequest, transaction state.Transaction) ([]state.Step, error) {
+	steps := ollama.NewInstallSteps(service.Ollama, request)
+	integrationSteps, err := service.integrationLifecycleSteps(operation, transaction, request.Alias)
+	if err != nil {
+		return nil, err
+	}
+	steps = append(steps, integrationSteps...)
+	return steps, nil
+}
+
+func (service Service) integrationLifecycleSteps(operation app.Operation, transaction state.Transaction, alias string) ([]state.Step, error) {
+	var vscodeSteps []state.Step
+	if service.VSCode != nil {
+		vscodeSteps = vscode.LifecycleSteps(service.VSCode, vscode.Request{
+			Alias: alias, Repository: operation.Options.Repository,
+		}, operation.Options.ManualCompleted)
+	}
+	steps := make([]state.Step, 0, len(vscodeSteps)+2)
+	for _, step := range vscodeSteps {
+		if step.Contract().ID != vscode.ManualHandoffStepID {
+			steps = append(steps, step)
+		}
+	}
+	if service.Copilot != nil {
+		copilotSteps, err := service.Copilot.ConfigureSteps(copilot.Request{
+			Alias: alias, Endpoint: operation.Config.Ollama.Endpoint, ExistingAssets: transaction.ManagedAssets,
+		})
+		if err != nil {
+			return nil, err
+		}
+		steps = append(steps, copilotSteps...)
+	}
+	for _, step := range vscodeSteps {
+		if step.Contract().ID == vscode.ManualHandoffStepID {
+			steps = append(steps, step)
+		}
+	}
+	return steps, nil
 }
 
 func (service Service) status(ctx context.Context, operation app.Operation) app.Result {
@@ -148,6 +179,7 @@ func (service Service) status(ctx context.Context, operation app.Operation) app.
 		}
 		result.Components = append(result.Components, vscodeComponents(status)...)
 	}
+	service.appendCopilotStatus(ctx, operation, transaction, &result)
 	if operation.Options.CheckUpdates || operation.Config.Update.CheckOnStatus {
 		if service.Updater == nil {
 			appendIssue(&result, issue(app.IssueUpdateUnavailable, app.SeverityWarning, "update", "Update checking is unavailable."))
@@ -176,13 +208,6 @@ func (service Service) repair(ctx context.Context, operation app.Operation) app.
 		diagnosis.Summary = "No repair was required."
 		return diagnosis
 	}
-	if operation.DryRun {
-		diagnosis.Command = app.CommandRepair
-		diagnosis.Outcome = app.OutcomeSuccess
-		diagnosis.ExitCode = app.ExitSuccess
-		diagnosis.Summary = "Dry run identified repairs without changing the host."
-		return diagnosis
-	}
 	capabilities, err := service.discover(ctx)
 	if err != nil {
 		return service.errorResult(operation.Command, err)
@@ -201,15 +226,87 @@ func (service Service) repair(ctx context.Context, operation app.Operation) app.
 			selected = &entry.ID
 		}
 	}
-	if service.VSCode != nil {
-		steps = append(steps, vscode.LifecycleSteps(service.VSCode, vscode.Request{
-			Alias: aliasFromTransaction(transaction), Repository: operation.Options.Repository,
-		}, operation.Options.ManualCompleted)...)
+	alias := aliasFromTransaction(transaction)
+	if alias == "" && operation.Config.Model.CatalogID != "" {
+		alias = aliasFor(operation.Config.Model.CatalogID)
+	}
+	if alias != "" && (service.VSCode != nil || service.Copilot != nil) {
+		integrationSteps, stepErr := service.integrationLifecycleSteps(operation, transaction, alias)
+		if stepErr != nil {
+			return service.errorResult(operation.Command, stepErr)
+		}
+		steps = append(steps, integrationSteps...)
 	}
 	if len(steps) == 0 {
 		return service.failure(operation.Command, app.IssuePrerequisiteMissing, "No compatible documented repair could be planned.")
 	}
-	return service.executeTransaction(ctx, operation, state.CommandRepair, steps, capabilities, selected, transaction.GeneratedAlias)
+	return service.executeTransaction(ctx, operation, state.CommandRepair, steps, capabilities, selected, stringPointer(alias))
+}
+
+func (service Service) copilotConfigure(ctx context.Context, operation app.Operation) app.Result {
+	if service.Copilot == nil {
+		return service.failure(operation.Command, app.IssuePrerequisiteMissing, "The Copilot CLI lifecycle service is unavailable.")
+	}
+	capabilities, err := service.discover(ctx)
+	if err != nil {
+		return service.errorResult(operation.Command, err)
+	}
+	transaction, stateErr := service.loadState(ctx)
+	if stateErr != nil && !errors.Is(stateErr, state.ErrNoState) {
+		return service.errorResult(operation.Command, stateErr)
+	}
+	alias := aliasFromTransaction(transaction)
+	if alias == "" && operation.Config.Model.CatalogID != "" {
+		alias = aliasFor(operation.Config.Model.CatalogID)
+	}
+	if alias == "" {
+		return service.failure(operation.Command, app.IssueCopilotAlias, "An exact selected local-ai alias is required before Copilot configuration.")
+	}
+	steps, err := service.Copilot.ConfigureSteps(service.copilotRequest(operation, transaction, alias))
+	if err != nil {
+		return service.errorResult(operation.Command, err)
+	}
+	return service.executeTransaction(ctx, operation, state.CommandCopilotConfigure, steps, capabilities, transaction.SelectedCatalogID, stringPointer(alias))
+}
+
+func (service Service) copilotOpen(ctx context.Context, operation app.Operation) app.Result {
+	if service.Copilot == nil {
+		return service.failure(operation.Command, app.IssuePrerequisiteMissing, "The Copilot CLI lifecycle service is unavailable.")
+	}
+	transaction, err := service.loadState(ctx)
+	if err != nil && !errors.Is(err, state.ErrNoState) {
+		return service.errorResult(operation.Command, err)
+	}
+	alias := aliasFromTransaction(transaction)
+	if alias == "" && operation.Config.Model.CatalogID != "" {
+		alias = aliasFor(operation.Config.Model.CatalogID)
+	}
+	if alias == "" {
+		return service.failure(operation.Command, app.IssueCopilotAlias, "An exact selected local-ai alias is required before opening Copilot.")
+	}
+	request := service.copilotRequest(operation, transaction, alias)
+	status, statusErr := service.Copilot.Status(ctx, request)
+	result := service.base(operation.Command)
+	result.Components = append(result.Components, copilotComponents(status)...)
+	for _, value := range status.Issues {
+		appendIssue(&result, value)
+	}
+	if statusErr != nil && len(status.Issues) == 0 {
+		appendIssue(&result, issueForError(statusErr))
+	}
+	if len(result.Issues) > 0 {
+		finalizeFailure(&result)
+		return result
+	}
+	if operation.DryRun {
+		result.Outcome, result.ExitCode, result.Summary = app.OutcomeSuccess, app.ExitSuccess, "Dry run verified the manager-owned offline Copilot launcher without executing it."
+		return result
+	}
+	if err := service.Copilot.Open(ctx, request, operation.Arguments, operation.Input, operation.Output, operation.Error); err != nil {
+		return service.errorResult(operation.Command, err)
+	}
+	result.Outcome, result.ExitCode, result.Summary = app.OutcomeSuccess, app.ExitSuccess, "The verified manager-owned offline Copilot launcher exited successfully."
+	return result
 }
 
 func (service Service) modelsList(ctx context.Context, operation app.Operation) app.Result {
@@ -364,9 +461,9 @@ func (service Service) verify(ctx context.Context, operation app.Operation) app.
 	result := service.doctor(ctx, operation)
 	result.Command = app.CommandVerify
 	if result.ExitCode == app.ExitSuccess {
-		result.Summary = "Runtime and VS Code verification passed."
+		result.Summary = "Runtime, VS Code, and Copilot verification passed."
 	} else {
-		result.Summary = "Runtime or VS Code verification needs attention."
+		result.Summary = "Runtime, VS Code, or Copilot verification needs attention."
 	}
 	return result
 }
@@ -423,10 +520,15 @@ func (service Service) uninstall(ctx context.Context, operation app.Operation) a
 		}
 		return result
 	}
+	if service.Copilot != nil {
+		if err := service.Copilot.Uninstall(ctx, transaction.ManagedAssets); err != nil {
+			return service.errorResult(operation.Command, err)
+		}
+	}
 	if service.Uninstaller == nil {
 		return service.failure(operation.Command, app.IssueInternal, "The manager uninstall service is unavailable.")
 	}
-	_, err = service.Uninstaller.Uninstall(ctx, transaction.ManagedAssets, install.UninstallOptions{
+	_, err = service.Uninstaller.Uninstall(ctx, withoutCopilotAssets(transaction.ManagedAssets), install.UninstallOptions{
 		RemoveAliases: operation.Options.RemoveAliases, RemoveModels: operation.Options.RemoveModels,
 		RemoveVSCodeExtension: operation.Options.RemoveVSCodeExtension, RemoveVSCode: operation.Options.RemoveVSCode,
 		RemoveOllama: operation.Options.RemoveOllama, ConfirmDestructive: operation.Options.ConfirmDestructive,
@@ -436,6 +538,43 @@ func (service Service) uninstall(ctx context.Context, operation app.Operation) a
 	}
 	result := service.base(operation.Command)
 	result.Outcome, result.ExitCode, result.Summary = app.OutcomeSuccess, app.ExitSuccess, "Manager-owned default assets were removed; external applications, profiles, models, and aliases were retained unless explicitly requested."
+	return result
+}
+
+func (service Service) appendCopilotStatus(ctx context.Context, operation app.Operation, transaction state.Transaction, result *app.Result) {
+	if service.Copilot == nil {
+		appendIssue(result, issue(app.IssuePrerequisiteMissing, app.SeverityError, "copilot", "The Copilot CLI lifecycle service is unavailable."))
+		return
+	}
+	alias := aliasFromTransaction(transaction)
+	if alias == "" && operation.Config.Model.CatalogID != "" {
+		alias = aliasFor(operation.Config.Model.CatalogID)
+	}
+	status, err := service.Copilot.Status(ctx, service.copilotRequest(operation, transaction, alias))
+	result.Components = append(result.Components, copilotComponents(status)...)
+	for _, value := range status.Issues {
+		appendIssue(result, value)
+	}
+	if err != nil && len(status.Issues) == 0 {
+		appendIssue(result, issueForError(err))
+	}
+}
+
+func (service Service) copilotRequest(operation app.Operation, transaction state.Transaction, alias string) copilot.Request {
+	return copilot.Request{
+		Alias: alias, Endpoint: operation.Config.Ollama.Endpoint,
+		ExistingAssets: append([]state.ManagedAsset(nil), transaction.ManagedAssets...),
+	}
+}
+
+func withoutCopilotAssets(assets []state.ManagedAsset) []state.ManagedAsset {
+	result := make([]state.ManagedAsset, 0, len(assets))
+	for _, asset := range assets {
+		if asset.AssetType == state.AssetCopilotApplication || asset.AssetType == state.AssetCopilotLauncher {
+			continue
+		}
+		result = append(result, asset)
+	}
 	return result
 }
 

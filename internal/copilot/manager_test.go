@@ -52,6 +52,31 @@ type versionRunner struct {
 	calls   []platform.Command
 }
 
+type openRunner struct {
+	mu      sync.Mutex
+	version string
+	calls   []platform.Command
+}
+
+func (runner *openRunner) Run(ctx context.Context, command platform.Command) (platform.CommandResult, error) {
+	if err := ctx.Err(); err != nil {
+		return platform.CommandResult{}, err
+	}
+	runner.mu.Lock()
+	runner.calls = append(runner.calls, command)
+	runner.mu.Unlock()
+	if len(command.Args) == 1 && command.Args[0] == "--version" {
+		return platform.CommandResult{Stdout: []byte(runner.version + "\n")}, nil
+	}
+	return platform.CommandResult{}, nil
+}
+
+func (runner *openRunner) Calls() []platform.Command {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return append([]platform.Command(nil), runner.calls...)
+}
+
 type selectiveVersionRunner struct {
 	mu       sync.Mutex
 	versions map[string]string
@@ -322,6 +347,7 @@ func TestConfigureLauncherRefusesUnownedTarget(t *testing.T) {
 	if err := filesystem.MkdirAll(filepath.Dir(external), 0o700); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := filesystem.WriteFile(external, []byte("external"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -342,6 +368,40 @@ func TestConfigureLauncherRefusesUnownedTarget(t *testing.T) {
 	data, readErr := filesystem.ReadFile(launcher)
 	if readErr != nil || string(data) != "#!/bin/sh\nunowned\n" {
 		t.Fatalf("unowned launcher was modified: %q, %v", data, readErr)
+	}
+}
+
+func TestOpenExecutesVerifiedLauncherWithUnchangedArgumentsAndStreams(t *testing.T) {
+	filesystem, paths := copilotTestFilesystem(t)
+	executable := filepath.Join(paths.Home, "tools", "copilot")
+	if err := filesystem.MkdirAll(filepath.Dir(executable), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := filesystem.WriteFile(executable, []byte("official"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runner := &openRunner{version: "1.0.101"}
+	manager := newCopilotTestManager(
+		filesystem, paths, runner, testkit.NewScriptedNetwork(),
+		fakeLocator{application: platform.Application{Name: "copilot", Executable: executable, Source: "path"}},
+		fakeOllama{version: "0.12.6", models: []string{"local-ai-model:latest"}},
+	)
+	request := Request{Alias: "local-ai-model:latest"}
+	if _, err := manager.ConfigureLauncher(context.Background(), request, "00000000-0000-4000-8000-000000000205"); err != nil {
+		t.Fatal(err)
+	}
+	arguments := []string{"prompt with spaces", "--flag=value", `literal"$*'argument`}
+	var input, output, errorOutput bytes.Buffer
+	if err := manager.Open(context.Background(), request, arguments, &input, &output, &errorOutput); err != nil {
+		t.Fatal(err)
+	}
+	calls := runner.Calls()
+	last := calls[len(calls)-1]
+	if last.Name != LauncherPath(paths, "linux") || strings.Join(last.Args, "\x00") != strings.Join(arguments, "\x00") {
+		t.Fatalf("open command = %#v", last)
+	}
+	if !last.NoTimeout || last.Stdin != &input || last.Stdout != &output || last.Stderr != &errorOutput {
+		t.Fatalf("open streams = %#v", last)
 	}
 }
 

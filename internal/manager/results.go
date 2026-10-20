@@ -9,6 +9,7 @@ import (
 
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/app"
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/catalog"
+	"github.com/artofthesmart/dotfiles-bootstrap/internal/copilot"
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/hardware"
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/install"
 	"github.com/artofthesmart/dotfiles-bootstrap/internal/ollama"
@@ -133,6 +134,33 @@ func vscodeComponents(value vscode.Status) []app.Component {
 	}
 }
 
+func copilotComponents(value copilot.Status) []app.Component {
+	applicationState := "absent"
+	if value.CopilotPresent {
+		applicationState = "present"
+	}
+	if value.VersionSupported {
+		applicationState = "ready"
+	}
+	launcherState := "absent"
+	if value.LauncherPresent {
+		launcherState = "present"
+	}
+	if value.LauncherValid && value.LauncherOwnership == state.OwnershipManagerOwned && value.OfflineEnforced {
+		launcherState = "ready"
+	}
+	return []app.Component{
+		component("copilot_cli", applicationState, value.VersionSupported, map[string]any{
+			"version": value.Version, "minimum_version": value.MinimumVersion,
+			"ownership": string(value.Ownership),
+		}),
+		component("copilot_local", launcherState, launcherState == "ready", map[string]any{
+			"alias": value.Alias, "ownership": string(value.LauncherOwnership),
+			"offline": value.OfflineEnforced, "provider_type": value.ProviderType, "wire_api": value.WireAPI,
+		}),
+	}
+}
+
 func recommendationComponent(value catalog.CandidateEvaluation, role string) app.Component {
 	attributes := map[string]any{
 		"role": role, "catalog_id": value.CatalogID, "model_name": value.OllamaName,
@@ -181,6 +209,10 @@ func issueForError(err error) app.Issue {
 	var deploymentError *install.DeploymentError
 	if errors.As(err, &deploymentError) {
 		return issue(deploymentError.Code, app.SeverityError, domainForIssue(deploymentError.Code), safeErrorSummary(deploymentError.Code))
+	}
+	var copilotError *copilot.Error
+	if errors.As(err, &copilotError) {
+		return issue(copilotError.Code, app.SeverityError, "copilot", safeErrorSummary(copilotError.Code))
 	}
 	var ollamaError *ollama.Error
 	if errors.As(err, &ollamaError) {
@@ -258,6 +290,8 @@ func safeErrorSummary(code app.IssueCode) string {
 		return "The exact model acquisition or alias operation failed."
 	case app.IssueRuntimeUnavailable, app.IssueRuntimeToolCall, app.IssueRuntimeContext, app.IssueRuntimeOffloadUnknown:
 		return "Local Ollama runtime verification failed."
+	case app.IssueCopilotMissing, app.IssueCopilotVersion, app.IssueCopilotLauncher, app.IssueCopilotProvider, app.IssueCopilotAlias, app.IssueCopilotOllama:
+		return "The offline Copilot CLI integration could not be verified."
 	case app.IssueAssetOwnership, app.IssueAssetConfirmation:
 		return "Asset ownership or destructive confirmation requirements were not satisfied."
 	case app.IssueUpdateUnavailable, app.IssueUpdateSelfCheck:
@@ -290,6 +324,8 @@ func domainForIssue(code app.IssueCode) string {
 		return "runtime"
 	case strings.HasPrefix(value, "LAI-VSCODE"):
 		return "vscode"
+	case strings.HasPrefix(value, "LAI-COPILOT"):
+		return "copilot"
 	case strings.HasPrefix(value, "LAI-STATE"):
 		return "state"
 	case strings.HasPrefix(value, "LAI-CONFIG"):
