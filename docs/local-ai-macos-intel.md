@@ -44,7 +44,8 @@ bash ./scripts/setup-local-ai.sh
    The wizard installs the Ollama extension in Local AI. Open or clone a
    repository there.
    In Chat, choose **Agent** in the mode control and your `local-ai-...` model
-   from the model picker. Choose local utility models in Settings.
+   with the sparkle icon. Choose utility models in Settings.
+   If warned about 128 tools, use **Configure Tools** and disable unused groups.
    Review tools individually. Start with a documentation
    edit and an existing test.
 

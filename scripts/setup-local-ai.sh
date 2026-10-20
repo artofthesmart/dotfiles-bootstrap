@@ -230,6 +230,11 @@ TOOL CALLING STATUS:
 The shortlist is limited to models currently presented as tool-capable by
 Ollama, but that label is not proof. Do not claim success; the wizard must see
 an actual structured Ollama API tool_calls response from the downloaded exact tag.
+Prefer candidates with current primary-source or reproducible evidence that they
+accept at least 128 tool definitions in one request, follow complex JSON schemas,
+and reliably choose among many tools. Basic single-tool support is not enough
+evidence. If a candidate's tool-definition limit or large-tool-set reliability
+is unknown, say so explicitly rather than guessing.
 
 REQUIRED RESPONSE FORMAT: Start your response with this copy-back line, before
 any greeting, explanation, heading, or analysis:
@@ -247,6 +252,10 @@ expectations, and memory headroom for OS, VS Code, model weights AND KV cache.
 Account for shared versus dedicated memory; do not add GPUs' VRAM together.
 Do not suggest cloud inference. Do not claim structured tool calling is verified:
 the wizard will test the exact downloaded model locally.
+Treat support for at least 128 declared tools, complex schemas and reliable
+selection from a large tool set as important compatibility criteria. Distinguish
+that model capability from VS Code's separate need to disable tools beyond its
+per-request limit.
 For integrated or unified-memory GPUs, treat RAM as one physical pool. Do not add
 shared graphics memory to RAM as extra capacity or infer a fixed GPU reservation.
 MANDATORY FOR THIS SETUP: We need at least 65536 tokens of context for the
@@ -539,20 +548,27 @@ Finish in the Local AI window (these UI steps are not automated):
    Restricted Mode can hide local models and leave only Auto available.
 2. Run "Developer: Reload Window" once so the newly installed extension is active.
 3. Open the built-in Copilot Chat. In the Chat input, choose Agent from the mode
-   control. Then use the separate model picker at the bottom of the Chat input
-   and choose $LOCAL_MODEL under Ollama. Ollama is not an Agent mode.
+   control. Then select the sparkle icon at the bottom of the Chat input; that
+   is the model picker even when it does not say Ollama. Choose $LOCAL_MODEL.
+   Ollama is not an Agent mode.
 4. If the model is absent, run "Ollama: Refresh Models" from the Command Palette.
    If still absent, run "Ollama: Diagnose Models" and inspect the Ollama output.
    Do NOT select Auto or a cloud model.
-5. In this profile's Settings, enable chat.agentHost.byokModels.enabled if
+5. If the harness says the model supports only 128 tools, select Configure Tools
+   in the Chat input. Disable unneeded MCP servers and extension tool groups
+   until 128 or fewer tools are enabled. Keep the core file/search/edit,
+   terminal, problems/test and Git tools needed for coding. VS Code also offers
+   the experimental github.copilot.chat.virtualTools.threshold setting for
+   automatic grouping, but explicit selection is more predictable locally.
+6. In this profile's Settings, enable chat.agentHost.byokModels.enabled if
    required for the Copilot harness. Set chat.utilityModel and
    chat.utilitySmallModel to your local model using their model pickers.
    Verify Ollama's endpoint is http://127.0.0.1:11434. Remote provider
    configurations take precedence; remove obsolete built-in Ollama configs.
-6. Ask: "Suggest one small documentation improvement, apply it after approval,
+7. Ask: "Suggest one small documentation improvement, apply it after approval,
    then run an existing relevant test if available." Review each tool approval
    and the resulting diff. Keep changes only if you want them.
-7. For metered cloud Copilot: Manage (gear) > Profiles > your previous profile
+8. For metered cloud Copilot: Manage (gear) > Profiles > your previous profile
    (usually Default), then select a cloud model in Chat. Your normal account,
    plan and organization policy apply. Return via Profiles > Local AI and
    explicitly select $LOCAL_MODEL again. A profile is not a billing boundary.

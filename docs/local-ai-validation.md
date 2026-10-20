@@ -104,7 +104,7 @@ For each platform, exercise these steps:
    unchanged, and your selected existing checkout opens. Trust it manually.
    Run **Ollama: Diagnose Models** to confirm the loopback endpoint and alias.
 6. Choose Agent in the Chat mode control and the exact local alias in the
-   separate model picker at the bottom of the Chat input. Configure local utility models and
+   sparkle-icon model picker at the bottom of the Chat input. Configure local utility models and
    approve a small edit and existing relevant test. Review the diff and
    tool approvals. Do not disable approval safeguards.
 7. Switch to the previous profile and a cloud model, then back to Local AI
@@ -205,6 +205,14 @@ For each platform, exercise these steps:
   Remove deprecated built-in Ollama provider configuration in the Local AI
   profile; provider-specific configuration can override its endpoint setting.
   Enable `chat.agentHost.byokModels.enabled` if required for your harness.
+- **More than 128 tools:** the Local harness can send at most 128 enabled tools
+  in one request. Select **Configure Tools** in the Chat input and disable
+  unneeded MCP servers or extension tool groups. Keep the core file/search/edit,
+  terminal, problems/test and Git tools required for the current coding task.
+  Enabling tools remains separate from approving their use. VS Code also offers
+  the experimental `github.copilot.chat.virtualTools.threshold` setting for
+  automatic grouping, but explicit selection is more predictable with local
+  models and makes the available capabilities easier to review.
 - **Metered utility tasks:** the chat model does not automatically control
   background utility models. In Local AI's Settings, choose the local model
   for `chat.utilityModel` and `chat.utilitySmallModel`. Do not leave cloud

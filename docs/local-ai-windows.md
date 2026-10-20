@@ -44,8 +44,9 @@ override managed controls.
    creates a `local-ai-...` model fixed to your chosen context.
 4. **Open or clone a repository.** The wizard configures a separate **Local AI**
    profile with bundled Copilot Chat and the official Ollama extension.
-   In Chat, choose **Agent** in the mode control and your local model from the
-   model picker. Select local utility models in Settings. Approve tools.
+   In Chat, choose **Agent** in the mode control and your local model with the
+   sparkle icon. Select utility models in Settings. Approve tools.
+   If warned about 128 tools, use **Configure Tools** and disable unused groups.
    Try a documentation edit and
    an existing test; inspect the diff.
 
