@@ -1,0 +1,904 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:local-ai-manager:schema:transaction-state:v1",
+  "title": "Local AI Manager transaction state v1",
+  "description": "Durable, privacy-minimized state for one mutating Local AI Manager operation. Implementations MUST NOT store secrets, tokens, arbitrary environment values, repository paths or content, prompts, model responses, VS Code chat content, literal usernames or hostnames, serial numbers, IP/MAC addresses, or raw command output.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manager_version",
+    "transaction_id",
+    "command",
+    "status",
+    "created_at",
+    "updated_at",
+    "effective_config_digest",
+    "host",
+    "steps",
+    "managed_assets",
+    "issues",
+    "manual_actions",
+    "rollback"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "local-ai.transaction-state/v1",
+      "description": "Major-version discriminator. Readers must reject unknown major versions."
+    },
+    "manager_version": {
+      "$ref": "#/$defs/semanticVersion"
+    },
+    "transaction_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "command": {
+      "enum": [
+        "setup",
+        "repair",
+        "models_install",
+        "models_remove",
+        "vscode_configure",
+        "update",
+        "update_rollback",
+        "uninstall"
+      ]
+    },
+    "status": {
+      "enum": [
+        "planned",
+        "running",
+        "verifying",
+        "awaiting_manual",
+        "interrupted",
+        "failed",
+        "rolling_back",
+        "rolled_back",
+        "rollback_failed",
+        "succeeded",
+        "archived"
+      ]
+    },
+    "created_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "updated_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "completed_at": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "effective_config_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Digest of the canonical privacy-safe effective configuration, not the configuration contents."
+    },
+    "selected_catalog_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+      "default": null
+    },
+    "generated_alias": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^local-ai-[a-zA-Z0-9][a-zA-Z0-9._-]*(?::[a-zA-Z0-9][a-zA-Z0-9._-]*)?$",
+      "default": null
+    },
+    "host": {
+      "$ref": "#/$defs/host"
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/stepReceipt"
+      }
+    },
+    "managed_assets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/managedAsset"
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/issue"
+      }
+    },
+    "manual_actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/manualAction"
+      }
+    },
+    "rollback": {
+      "$ref": "#/$defs/rollback"
+    },
+    "previous_state": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/stateLocator"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Privacy-safe locator and digest for the retained previous state copy.",
+      "default": null
+    }
+  },
+  "$defs": {
+    "semanticVersion": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 timestamp in UTC."
+    },
+    "issueCode": {
+      "enum": [
+        "LAI-HOST-001",
+        "LAI-HOST-002",
+        "LAI-HOST-003",
+        "LAI-HOST-004",
+        "LAI-PREREQ-001",
+        "LAI-PREREQ-002",
+        "LAI-PREREQ-003",
+        "LAI-POLICY-001",
+        "LAI-POLICY-002",
+        "LAI-POLICY-003",
+        "LAI-NET-001",
+        "LAI-NET-002",
+        "LAI-NET-003",
+        "LAI-INTEGRITY-001",
+        "LAI-INTEGRITY-002",
+        "LAI-INTEGRITY-003",
+        "LAI-CAPACITY-001",
+        "LAI-CAPACITY-002",
+        "LAI-CAPACITY-003",
+        "LAI-MODEL-001",
+        "LAI-MODEL-002",
+        "LAI-MODEL-003",
+        "LAI-MODEL-004",
+        "LAI-MODEL-005",
+        "LAI-MODEL-006",
+        "LAI-RUNTIME-001",
+        "LAI-RUNTIME-002",
+        "LAI-RUNTIME-003",
+        "LAI-RUNTIME-004",
+        "LAI-RUNTIME-005",
+        "LAI-VSCODE-001",
+        "LAI-VSCODE-002",
+        "LAI-VSCODE-003",
+        "LAI-VSCODE-004",
+        "LAI-VSCODE-005",
+        "LAI-VSCODE-006",
+        "LAI-STATE-001",
+        "LAI-STATE-002",
+        "LAI-STATE-003",
+        "LAI-STATE-004",
+        "LAI-CONFIG-001",
+        "LAI-CONFIG-002",
+        "LAI-ASSET-001",
+        "LAI-ASSET-002",
+        "LAI-UPDATE-001",
+        "LAI-UPDATE-002",
+        "LAI-INTERNAL-001"
+      ]
+    },
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "architecture",
+        "os_version",
+        "desktop_session",
+        "capability_digest"
+      ],
+      "properties": {
+        "os": {
+          "enum": [
+            "windows",
+            "macos",
+            "linux"
+          ]
+        },
+        "architecture": {
+          "enum": [
+            "amd64",
+            "arm64"
+          ]
+        },
+        "os_version": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Product/build version only; never a host name or image label containing identity."
+        },
+        "linux_distribution": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "ubuntu",
+            "debian",
+            null
+          ],
+          "default": null
+        },
+        "desktop_session": {
+          "type": "boolean"
+        },
+        "capability_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Digest of normalized allowlisted hardware facts. Raw identity-bearing discovery output is forbidden."
+        }
+      }
+    },
+    "stepReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receipt_version",
+        "step_id",
+        "owner",
+        "action",
+        "risk",
+        "status",
+        "prerequisite_step_ids",
+        "produced_fact_ids",
+        "phases",
+        "mutation_asset_ids",
+        "issues"
+      ],
+      "properties": {
+        "receipt_version": {
+          "const": 1
+        },
+        "step_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+          "maxLength": 96
+        },
+        "owner": {
+          "enum": [
+            "app",
+            "state",
+            "platform",
+            "hardware",
+            "catalog",
+            "ollama",
+            "vscode",
+            "install",
+            "update"
+          ]
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "description": "Stable privacy-safe action summary, not a raw command line."
+        },
+        "risk": {
+          "enum": [
+            "read_only",
+            "user_local",
+            "large_download",
+            "privileged",
+            "destructive",
+            "external_app_restart"
+          ]
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "blocked",
+            "running",
+            "awaiting_manual",
+            "failed",
+            "verified",
+            "undone",
+            "undo_failed",
+            "skipped_verified"
+          ]
+        },
+        "prerequisite_step_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+          }
+        },
+        "produced_fact_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+          }
+        },
+        "consent": {
+          "$ref": "#/$defs/consent"
+        },
+        "phases": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "check",
+            "plan",
+            "apply",
+            "verify",
+            "undo"
+          ],
+          "properties": {
+            "check": {
+              "$ref": "#/$defs/phaseReceipt"
+            },
+            "plan": {
+              "$ref": "#/$defs/phaseReceipt"
+            },
+            "apply": {
+              "$ref": "#/$defs/phaseReceipt"
+            },
+            "verify": {
+              "$ref": "#/$defs/phaseReceipt"
+            },
+            "undo": {
+              "$ref": "#/$defs/phaseReceipt"
+            }
+          }
+        },
+        "mutation_asset_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^asset-[a-z0-9][a-z0-9._-]{0,95}$"
+          }
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issue"
+          }
+        }
+      }
+    },
+    "consent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required",
+        "decision"
+      ],
+      "properties": {
+        "required": {
+          "type": "boolean"
+        },
+        "decision": {
+          "enum": [
+            "not_required",
+            "pending",
+            "accepted",
+            "declined"
+          ]
+        },
+        "decided_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      }
+    },
+    "phaseReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "evidence"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "not_run",
+            "running",
+            "succeeded",
+            "failed",
+            "skipped",
+            "not_applicable"
+          ]
+        },
+        "started_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "completed_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "summary": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 240,
+          "description": "Privacy-safe semantic summary; never raw output.",
+          "default": null
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "observed_at",
+        "attributes"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "version",
+            "digest",
+            "file_state",
+            "application_state",
+            "service_state",
+            "registry_metadata",
+            "model_metadata",
+            "context_allocation",
+            "tool_call",
+            "offload",
+            "profile_state",
+            "extension_state",
+            "capacity"
+          ]
+        },
+        "observed_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "attributes": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,47}$"
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": "Allowlisted semantic values only. Paths must use ${HOME}; identity, content, prompts, responses, tokens, and raw output are forbidden."
+        }
+      }
+    },
+    "managedAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset_id",
+        "asset_type",
+        "display_name",
+        "origin",
+        "ownership",
+        "locator",
+        "created_or_adopted_by_step",
+        "dependencies",
+        "uninstall",
+        "verification"
+      ],
+      "properties": {
+        "asset_id": {
+          "type": "string",
+          "pattern": "^asset-[a-z0-9][a-z0-9._-]{0,95}$"
+        },
+        "asset_type": {
+          "enum": [
+            "manager_binary",
+            "manager_directory",
+            "path_entry",
+            "download_cache",
+            "rollback_binary",
+            "vscode_application",
+            "ollama_application",
+            "ollama_service",
+            "vscode_profile",
+            "vscode_extension",
+            "ollama_source_model",
+            "ollama_alias",
+            "state_file",
+            "backup_file"
+          ]
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "origin": {
+          "enum": [
+            "installed_by_manager",
+            "created_by_manager",
+            "detected_existing",
+            "user_declared",
+            "adopted"
+          ]
+        },
+        "ownership": {
+          "enum": [
+            "manager_owned",
+            "user_owned",
+            "external_detected"
+          ]
+        },
+        "locator": {
+          "$ref": "#/$defs/assetLocator"
+        },
+        "created_or_adopted_by_step": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+          "default": null
+        },
+        "dependencies": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^asset-[a-z0-9][a-z0-9._-]{0,95}$"
+          }
+        },
+        "uninstall": {
+          "$ref": "#/$defs/uninstallRule"
+        },
+        "backup": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/stateLocator"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "verification": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        }
+      }
+    },
+    "assetLocator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "path",
+            "application_id",
+            "service_id",
+            "profile_name",
+            "extension_id",
+            "model_name",
+            "path_marker"
+          ]
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Stable locator only. User-home paths MUST use the literal ${HOME} token and MUST NOT contain a literal username."
+        }
+      }
+    },
+    "uninstallRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy",
+        "reversible"
+      ],
+      "properties": {
+        "policy": {
+          "enum": [
+            "remove_with_manager",
+            "retain",
+            "explicit_flag",
+            "guided_ui_only"
+          ]
+        },
+        "explicit_flag": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "--remove-aliases",
+            "--remove-models",
+            "--remove-vscode-extension",
+            "--remove-vscode",
+            "--remove-ollama",
+            null
+          ],
+          "default": null
+        },
+        "reversible": {
+          "type": "boolean"
+        },
+        "not_reversible_reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 240,
+          "default": null
+        }
+      }
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "severity",
+        "domain",
+        "summary",
+        "remediations"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/issueCode"
+        },
+        "severity": {
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ]
+        },
+        "domain": {
+          "enum": [
+            "host",
+            "prerequisite",
+            "policy",
+            "network",
+            "integrity",
+            "capacity",
+            "model",
+            "runtime",
+            "vscode",
+            "state",
+            "config",
+            "asset",
+            "update",
+            "internal"
+          ]
+        },
+        "component": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 80,
+          "default": null
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 320
+        },
+        "repair_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+          "default": null
+        },
+        "remediations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/remediation"
+          }
+        }
+      }
+    },
+    "remediation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "summary",
+        "safe_for_yes"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "automatic",
+            "command",
+            "ui",
+            "policy",
+            "documentation",
+            "retry"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 320
+        },
+        "command": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 320,
+          "description": "Optional documented command using placeholders; never include secrets, usernames, or unredacted user paths.",
+          "default": null
+        },
+        "safe_for_yes": {
+          "type": "boolean"
+        }
+      }
+    },
+    "manualAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_id",
+        "issue_code",
+        "surface",
+        "summary",
+        "completed"
+      ],
+      "properties": {
+        "action_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+        },
+        "issue_code": {
+          "$ref": "#/$defs/issueCode"
+        },
+        "surface": {
+          "enum": [
+            "vscode",
+            "ollama",
+            "os",
+            "organization_policy",
+            "terminal"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 320
+        },
+        "completed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "available",
+        "status",
+        "step_ids"
+      ],
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "status": {
+          "enum": [
+            "not_needed",
+            "available",
+            "running",
+            "succeeded",
+            "partial",
+            "failed",
+            "not_available"
+          ]
+        },
+        "step_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+          }
+        }
+      }
+    },
+    "stateLocator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "digest"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^\\$\\{HOME\\}[/\\\\].+",
+          "maxLength": 512,
+          "description": "Privacy-safe path using ${HOME}, never a literal username."
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

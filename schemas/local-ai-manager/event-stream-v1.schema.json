@@ -1,0 +1,528 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:local-ai-manager:schema:event-stream:v1",
+  "title": "Local AI Manager JSON event/result stream v1",
+  "description": "Schema for each independent newline-delimited JSON record emitted by --json. A stream contains zero or more event records followed by exactly one result record. Records are privacy allowlisted and MUST NOT contain repository content, prompts, model responses, chat content, tokens, arbitrary environment values, literal usernames/hostnames, serials, network identifiers, or raw command output.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/event"
+    },
+    {
+      "$ref": "#/$defs/result"
+    }
+  ],
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "uuidOrNull": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "issueCode": {
+      "enum": [
+        "LAI-HOST-001",
+        "LAI-HOST-002",
+        "LAI-HOST-003",
+        "LAI-HOST-004",
+        "LAI-PREREQ-001",
+        "LAI-PREREQ-002",
+        "LAI-PREREQ-003",
+        "LAI-POLICY-001",
+        "LAI-POLICY-002",
+        "LAI-POLICY-003",
+        "LAI-NET-001",
+        "LAI-NET-002",
+        "LAI-NET-003",
+        "LAI-INTEGRITY-001",
+        "LAI-INTEGRITY-002",
+        "LAI-INTEGRITY-003",
+        "LAI-CAPACITY-001",
+        "LAI-CAPACITY-002",
+        "LAI-CAPACITY-003",
+        "LAI-MODEL-001",
+        "LAI-MODEL-002",
+        "LAI-MODEL-003",
+        "LAI-MODEL-004",
+        "LAI-MODEL-005",
+        "LAI-MODEL-006",
+        "LAI-RUNTIME-001",
+        "LAI-RUNTIME-002",
+        "LAI-RUNTIME-003",
+        "LAI-RUNTIME-004",
+        "LAI-RUNTIME-005",
+        "LAI-VSCODE-001",
+        "LAI-VSCODE-002",
+        "LAI-VSCODE-003",
+        "LAI-VSCODE-004",
+        "LAI-VSCODE-005",
+        "LAI-VSCODE-006",
+        "LAI-STATE-001",
+        "LAI-STATE-002",
+        "LAI-STATE-003",
+        "LAI-STATE-004",
+        "LAI-CONFIG-001",
+        "LAI-CONFIG-002",
+        "LAI-ASSET-001",
+        "LAI-ASSET-002",
+        "LAI-UPDATE-001",
+        "LAI-UPDATE-002",
+        "LAI-INTERNAL-001"
+      ]
+    },
+    "command": {
+      "enum": [
+        "setup",
+        "status",
+        "doctor",
+        "repair",
+        "models_list",
+        "models_recommend",
+        "models_install",
+        "models_remove",
+        "vscode_configure",
+        "vscode_open",
+        "verify",
+        "update",
+        "update_rollback",
+        "uninstall",
+        "report"
+      ]
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "record_type",
+        "sequence",
+        "timestamp",
+        "command",
+        "transaction_id",
+        "kind",
+        "level",
+        "message",
+        "attributes"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "local-ai.event-stream/v1"
+        },
+        "record_type": {
+          "const": "event"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timestamp": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "command": {
+          "$ref": "#/$defs/command"
+        },
+        "transaction_id": {
+          "$ref": "#/$defs/uuidOrNull"
+        },
+        "kind": {
+          "enum": [
+            "operation_started",
+            "phase_started",
+            "phase_completed",
+            "progress",
+            "consent_required",
+            "manual_action",
+            "issue",
+            "asset_changed",
+            "operation_completed"
+          ]
+        },
+        "level": {
+          "enum": [
+            "debug",
+            "info",
+            "warning",
+            "error"
+          ]
+        },
+        "step_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+          "default": null
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400,
+          "description": "Privacy-safe human summary, not raw command output."
+        },
+        "progress": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/progress"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "issue": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/issue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "attributes": {
+          "$ref": "#/$defs/attributes"
+        }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "record_type",
+        "sequence",
+        "timestamp",
+        "command",
+        "transaction_id",
+        "outcome",
+        "exit_code",
+        "summary",
+        "issues",
+        "components",
+        "manual_actions"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "local-ai.event-stream/v1"
+        },
+        "record_type": {
+          "const": "result"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timestamp": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "command": {
+          "$ref": "#/$defs/command"
+        },
+        "transaction_id": {
+          "$ref": "#/$defs/uuidOrNull"
+        },
+        "outcome": {
+          "enum": [
+            "success",
+            "cancelled",
+            "manual_required",
+            "failed"
+          ]
+        },
+        "exit_code": {
+          "enum": [
+            0,
+            2,
+            3,
+            10,
+            11,
+            12,
+            20,
+            21,
+            22,
+            30,
+            31,
+            32,
+            40,
+            50,
+            60,
+            70
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issue"
+          }
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/component"
+          }
+        },
+        "manual_actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/manualAction"
+          }
+        }
+      }
+    },
+    "progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "completed"
+      ],
+      "properties": {
+        "unit": {
+          "enum": [
+            "bytes",
+            "steps",
+            "attempts",
+            "percent",
+            "indeterminate"
+          ]
+        },
+        "completed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "default": null
+        }
+      }
+    },
+    "attributes": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]{0,47}$"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "maxLength": 256
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "description": "Allowlisted scalar facts only. Paths use ${HOME}; content, identity, secrets, and raw output are forbidden."
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "severity",
+        "domain",
+        "summary",
+        "remediations"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/issueCode"
+        },
+        "severity": {
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ]
+        },
+        "domain": {
+          "enum": [
+            "host",
+            "prerequisite",
+            "policy",
+            "network",
+            "integrity",
+            "capacity",
+            "model",
+            "runtime",
+            "vscode",
+            "state",
+            "config",
+            "asset",
+            "update",
+            "internal"
+          ]
+        },
+        "component": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 80,
+          "default": null
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 320
+        },
+        "repair_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+          "default": null
+        },
+        "remediations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/remediation"
+          }
+        }
+      }
+    },
+    "remediation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "summary",
+        "safe_for_yes"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "automatic",
+            "command",
+            "ui",
+            "policy",
+            "documentation",
+            "retry"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 320
+        },
+        "command": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 320,
+          "default": null
+        },
+        "safe_for_yes": {
+          "type": "boolean"
+        }
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component",
+        "state",
+        "verified",
+        "attributes"
+      ],
+      "properties": {
+        "component": {
+          "enum": [
+            "host",
+            "manager",
+            "vscode",
+            "vscode_profile",
+            "vscode_extension",
+            "ollama",
+            "source_model",
+            "local_alias",
+            "runtime_context",
+            "runtime_tools",
+            "runtime_offload",
+            "state",
+            "update"
+          ]
+        },
+        "state": {
+          "enum": [
+            "unknown",
+            "absent",
+            "present",
+            "ready",
+            "degraded",
+            "blocked",
+            "failed",
+            "manual_required",
+            "not_applicable"
+          ]
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "attributes": {
+          "$ref": "#/$defs/attributes"
+        }
+      }
+    },
+    "manualAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_id",
+        "issue_code",
+        "surface",
+        "summary"
+      ],
+      "properties": {
+        "action_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+        },
+        "issue_code": {
+          "$ref": "#/$defs/issueCode"
+        },
+        "surface": {
+          "enum": [
+            "vscode",
+            "ollama",
+            "os",
+            "organization_policy",
+            "terminal"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 320
+        }
+      }
+    }
+  }
+}

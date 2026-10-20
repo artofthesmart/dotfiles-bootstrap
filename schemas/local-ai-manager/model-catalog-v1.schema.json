@@ -1,0 +1,602 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:local-ai-manager:schema:model-catalog:v1",
+  "title": "Local AI Manager model catalog v1",
+  "description": "Reviewed deterministic catalog of exact local Ollama model tags. Catalog claims are eligibility evidence, not runtime proof; every selected exact tag is revalidated before acquisition and after installation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "catalog_version",
+    "reviewed_at",
+    "entries"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "local-ai.model-catalog/v1"
+    },
+    "catalog_version": {
+      "$ref": "#/$defs/semanticVersion",
+      "description": "Version of reviewed catalog content, independent of application and schema versions."
+    },
+    "reviewed_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "$defs": {
+    "semanticVersion": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "httpsUri": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "model",
+        "source",
+        "download",
+        "context",
+        "tools",
+        "ollama_compatibility",
+        "license",
+        "eligibility",
+        "host_tiers",
+        "memory_estimate",
+        "recommendation",
+        "known_caveats",
+        "evidence_date",
+        "references"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+          "description": "Stable catalog identifier. It is never reused for a different exact model tag."
+        },
+        "status": {
+          "enum": [
+            "recommended",
+            "fallback",
+            "experimental",
+            "deprecated",
+            "blocked"
+          ]
+        },
+        "model": {
+          "$ref": "#/$defs/model"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "download": {
+          "$ref": "#/$defs/byteRange"
+        },
+        "context": {
+          "$ref": "#/$defs/context"
+        },
+        "tools": {
+          "$ref": "#/$defs/tools"
+        },
+        "ollama_compatibility": {
+          "$ref": "#/$defs/ollamaCompatibility"
+        },
+        "license": {
+          "$ref": "#/$defs/license"
+        },
+        "eligibility": {
+          "$ref": "#/$defs/eligibility"
+        },
+        "host_tiers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/hostTier"
+          }
+        },
+        "memory_estimate": {
+          "$ref": "#/$defs/memoryEstimate"
+        },
+        "recommendation": {
+          "$ref": "#/$defs/recommendation"
+        },
+        "known_caveats": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400
+          }
+        },
+        "evidence_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "references": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/httpsUri"
+          }
+        }
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ollama_name",
+        "family",
+        "parameter_scale_billion",
+        "quantization",
+        "architecture"
+      ],
+      "properties": {
+        "ollama_name": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*:[a-zA-Z0-9][a-zA-Z0-9._-]*$",
+          "description": "Exact local Ollama library name and tag; latest must be written explicitly if intended."
+        },
+        "family": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "parameter_scale_billion": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "quantization": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "architecture": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publisher",
+        "model_page",
+        "registry_manifest"
+      ],
+      "properties": {
+        "publisher": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "model_page": {
+          "$ref": "#/$defs/httpsUri"
+        },
+        "registry_manifest": {
+          "$ref": "#/$defs/httpsUri"
+        },
+        "expected_model_digest": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Optional reviewed model-layer digest. Live manifest and bounded GGUF metadata checks remain mandatory.",
+          "default": null
+        }
+      }
+    },
+    "byteRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_bytes",
+        "maximum_bytes"
+      ],
+      "properties": {
+        "minimum_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maximum_bytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "description": "Expected exact-tag transfer range. Implementations must additionally enforce minimum_bytes <= maximum_bytes."
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "advertised_native_tokens",
+        "required_tokens",
+        "verification_method",
+        "extended_context_requirements"
+      ],
+      "properties": {
+        "advertised_native_tokens": {
+          "type": "integer",
+          "minimum": 65536
+        },
+        "required_tokens": {
+          "const": 65536
+        },
+        "verification_method": {
+          "enum": [
+            "registry_gguf_metadata",
+            "official_model_metadata",
+            "both"
+          ]
+        },
+        "extended_context_requirements": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 320
+          }
+        }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "advertised",
+        "evidence_level",
+        "structured_call_verified",
+        "large_tool_set",
+        "complex_schema",
+        "known_template_caveats",
+        "evidence_references"
+      ],
+      "properties": {
+        "advertised": {
+          "const": true
+        },
+        "evidence_level": {
+          "enum": [
+            "official_claim",
+            "maintainer_reproduction",
+            "physical_acceptance"
+          ]
+        },
+        "structured_call_verified": {
+          "type": "boolean",
+          "description": "Catalog evidence only. Installation must rerun the standard harmless structured tool-call test."
+        },
+        "large_tool_set": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "tested_definition_count"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "verified",
+                "claimed",
+                "unknown",
+                "failed"
+              ]
+            },
+            "tested_definition_count": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1,
+              "default": null
+            }
+          }
+        },
+        "complex_schema": {
+          "enum": [
+            "verified",
+            "claimed",
+            "unknown",
+            "failed"
+          ]
+        },
+        "known_template_caveats": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 320
+          }
+        },
+        "evidence_references": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/httpsUri"
+          }
+        }
+      }
+    },
+    "ollamaCompatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_version",
+        "maximum_tested_version"
+      ],
+      "properties": {
+        "minimum_version": {
+          "$ref": "#/$defs/semanticVersion"
+        },
+        "maximum_tested_version": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/semanticVersion"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "license": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identifier",
+        "name",
+        "commercial_use",
+        "summary",
+        "source"
+      ],
+      "properties": {
+        "identifier": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "SPDX identifier when one accurately applies; otherwise a stable upstream license identifier."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "commercial_use": {
+          "enum": [
+            "allowed",
+            "restricted",
+            "prohibited",
+            "unclear"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Plain-language maintainer summary, not legal advice."
+        },
+        "source": {
+          "$ref": "#/$defs/httpsUri"
+        }
+      }
+    },
+    "eligibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operating_systems",
+        "architectures",
+        "execution_modes",
+        "disqualifiers"
+      ],
+      "properties": {
+        "operating_systems": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "windows",
+              "macos",
+              "linux"
+            ]
+          }
+        },
+        "architectures": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "amd64",
+              "arm64"
+            ]
+          }
+        },
+        "execution_modes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "cpu_only",
+              "apple_unified",
+              "integrated_shared",
+              "dedicated_gpu"
+            ]
+          }
+        },
+        "disqualifiers": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "unsupported_architecture",
+              "cloud_only",
+              "native_context_below_minimum",
+              "license_incompatible",
+              "tool_capability_failed",
+              "insufficient_disk",
+              "insufficient_memory_headroom",
+              "ollama_version_incompatible",
+              "blocked_status"
+            ]
+          }
+        }
+      }
+    },
+    "hostTier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "execution_mode",
+        "minimum_system_memory_bytes",
+        "minimum_accelerator_memory_bytes",
+        "minimum_free_storage_bytes",
+        "expected_offload",
+        "notes"
+      ],
+      "properties": {
+        "execution_mode": {
+          "enum": [
+            "cpu_only",
+            "apple_unified",
+            "integrated_shared",
+            "dedicated_gpu"
+          ]
+        },
+        "minimum_system_memory_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "minimum_accelerator_memory_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "description": "Null for CPU-only or unified/shared modes where a separate fixed VRAM pool must not be invented."
+        },
+        "minimum_free_storage_bytes": {
+          "type": "integer",
+          "minimum": 2147483648
+        },
+        "expected_offload": {
+          "enum": [
+            "cpu",
+            "partial_gpu",
+            "full_gpu",
+            "unknown"
+          ]
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 320
+          }
+        }
+      }
+    },
+    "memoryEstimate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "formula_version",
+        "model_weights_bytes",
+        "kv_cache_bytes_per_token",
+        "runtime_overhead_bytes",
+        "minimum_os_editor_headroom_bytes"
+      ],
+      "properties": {
+        "formula_version": {
+          "const": 1
+        },
+        "model_weights_bytes": {
+          "$ref": "#/$defs/byteRange"
+        },
+        "kv_cache_bytes_per_token": {
+          "$ref": "#/$defs/byteRange"
+        },
+        "runtime_overhead_bytes": {
+          "$ref": "#/$defs/byteRange"
+        },
+        "minimum_os_editor_headroom_bytes": {
+          "type": "integer",
+          "minimum": 1073741824
+        }
+      },
+      "description": "Conservative components used to estimate fit at the requested context. Shared/unified and dedicated pools are evaluated separately and never added together as interchangeable capacity."
+    },
+    "recommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agent_reliability_tier",
+        "tool_schema_tier",
+        "cpu_fallback_tier",
+        "score_adjustments"
+      ],
+      "properties": {
+        "agent_reliability_tier": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "tool_schema_tier": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "cpu_fallback_tier": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "score_adjustments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "reason",
+              "points"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240
+              },
+              "points": {
+                "type": "integer",
+                "minimum": -100,
+                "maximum": 100
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

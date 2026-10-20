@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:local-ai-manager:schema:config:v1",
+  "title": "Local AI Manager configuration v1",
+  "description": "User-authored configuration for stable Local AI Manager commands. Command-line values override this file. The file MUST NOT contain credentials, tokens, proxy authorization, arbitrary environment variables, repository content, prompts, model responses, literal usernames/hostnames, device identifiers, or network identifiers.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "local-ai.config/v1",
+      "description": "Major-version discriminator. Unknown major versions are rejected."
+    },
+    "behavior": {
+      "$ref": "#/$defs/behavior"
+    },
+    "install": {
+      "$ref": "#/$defs/install"
+    },
+    "model": {
+      "$ref": "#/$defs/model"
+    },
+    "ollama": {
+      "$ref": "#/$defs/ollama"
+    },
+    "vscode": {
+      "$ref": "#/$defs/vscode"
+    },
+    "repair": {
+      "$ref": "#/$defs/repair"
+    },
+    "update": {
+      "$ref": "#/$defs/update"
+    },
+    "report": {
+      "$ref": "#/$defs/report"
+    }
+  },
+  "$defs": {
+    "behavior": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "accept_safe_defaults": {
+          "type": "boolean",
+          "default": false,
+          "description": "Equivalent to --yes. This cannot approve elevation, workspace trust, agent tools, policy exceptions, external-application removal, model deletion, or other protected/destructive actions."
+        },
+        "dry_run": {
+          "type": "boolean",
+          "default": false
+        },
+        "output": {
+          "enum": [
+            "human",
+            "json"
+          ],
+          "default": "human"
+        },
+        "color": {
+          "enum": [
+            "auto",
+            "always",
+            "never"
+          ],
+          "default": "auto"
+        },
+        "resume_policy": {
+          "enum": [
+            "ask",
+            "resume",
+            "restart",
+            "fail"
+          ],
+          "default": "ask"
+        }
+      }
+    },
+    "install": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "manager_directory": {
+          "type": "string",
+          "pattern": "^\\$\\{HOME\\}[/\\\\].+",
+          "maxLength": 512,
+          "description": "User-local path using the literal ${HOME} token; literal usernames are forbidden."
+        },
+        "manage_path": {
+          "type": "boolean",
+          "default": true,
+          "description": "When true, use only a marker-owned reversible PATH change after consent."
+        },
+        "allow_application_install": {
+          "type": "boolean",
+          "default": true,
+          "description": "Permits planning official VS Code/Ollama installation. It does not grant elevation or installer-UI consent."
+        }
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "catalog_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+        },
+        "fallback_catalog_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+        },
+        "context_tokens": {
+          "type": "integer",
+          "minimum": 65536,
+          "maximum": 1048576,
+          "default": 65536,
+          "description": "Requested alias and runtime context. Values below the product minimum are invalid."
+        },
+        "allow_experimental": {
+          "type": "boolean",
+          "default": false
+        },
+        "allowed_license_use": {
+          "enum": [
+            "personal",
+            "commercial",
+            "research",
+            "unknown"
+          ],
+          "default": "personal",
+          "description": "Eligibility filter only; not legal advice or acceptance of a model license."
+        },
+        "max_download_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "minimum_free_bytes_after_install": {
+          "type": "integer",
+          "minimum": 2147483648,
+          "default": 2147483648
+        },
+        "prefer_execution": {
+          "enum": [
+            "auto",
+            "gpu",
+            "cpu"
+          ],
+          "default": "auto",
+          "description": "Preference only. Runtime evidence determines actual offload; unsupported GPU use is never forced."
+        }
+      }
+    },
+    "ollama": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": {
+          "type": "string",
+          "pattern": "^http://(?:127\\.0\\.0\\.1|localhost)(?::[0-9]{1,5})?$",
+          "default": "http://127.0.0.1:11434",
+          "description": "First-stable supports only an unauthenticated loopback Ollama endpoint."
+        },
+        "model_storage": {
+          "type": "string",
+          "pattern": "^\\$\\{HOME\\}[/\\\\].+",
+          "maxLength": 512,
+          "description": "Optional privacy-safe user path using ${HOME}. Service-specific storage is still discovered and verified."
+        },
+        "existing_server_restart": {
+          "enum": [
+            "ask",
+            "never"
+          ],
+          "default": "ask",
+          "description": "An existing process/service is never restarted silently. There is deliberately no always value."
+        },
+        "tool_check_output_tokens": {
+          "type": "integer",
+          "enum": [
+            1024,
+            2048
+          ],
+          "default": 1024
+        }
+      }
+    },
+    "vscode": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profile_name": {
+          "const": "Local AI",
+          "default": "Local AI"
+        },
+        "open_after_setup": {
+          "type": "boolean",
+          "default": true
+        },
+        "install_official_ollama_extension": {
+          "const": true,
+          "default": true,
+          "description": "The stable contract installs only Ollama.ollama and never marketplace-installs bundled Copilot Chat."
+        },
+        "utility_model_guidance": {
+          "enum": [
+            "show",
+            "suppress"
+          ],
+          "default": "show",
+          "description": "Selection remains a supported UI handoff; this does not authorize undocumented profile edits."
+        },
+        "tool_limit_guidance": {
+          "enum": [
+            "show",
+            "suppress"
+          ],
+          "default": "show"
+        }
+      }
+    },
+    "repair": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "safe_only": {
+          "const": true,
+          "default": true,
+          "description": "First-stable configuration cannot enable undocumented or destructive automatic repairs."
+        },
+        "repair_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+          }
+        }
+      }
+    },
+    "update": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "const": "stable",
+          "default": "stable"
+        },
+        "check_on_status": {
+          "type": "boolean",
+          "default": false,
+          "description": "No update network request is made by status unless this is true or --check-updates is supplied."
+        },
+        "verify_github_attestation_when_available": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use an already available gh executable; never install gh solely for attestation verification."
+        }
+      }
+    },
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "include_hardware_summary": {
+          "type": "boolean",
+          "default": true
+        },
+        "include_recent_issue_codes": {
+          "type": "boolean",
+          "default": true
+        },
+        "include_recent_redacted_logs": {
+          "type": "boolean",
+          "default": true
+        },
+        "maximum_log_events": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000,
+          "default": 200
+        }
+      },
+      "description": "All report options remain constrained by the privacy allowlist; excluded data cannot be enabled by configuration."
+    }
+  }
+}
+
