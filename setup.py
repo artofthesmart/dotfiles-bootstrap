@@ -18,6 +18,37 @@ from rich.panel import Panel
 console = Console()
 HOME = os.path.expanduser("~")
 USER = os.environ.get("USER", "root")
+IS_MACOS = platform.system() == "Darwin"
+
+
+def install_packages(packages, description):
+    if IS_MACOS:
+        run_cmd(f"brew install {packages}", description)
+    else:
+        run_cmd(f"apt-get install -y {packages}", description, sudo=True)
+
+
+def replace_in_file(path, old, new):
+    if not os.path.isfile(path):
+        return
+    with open(path, encoding="utf-8") as file:
+        content = file.read()
+    updated = content.replace(old, new)
+    if updated != content:
+        with open(path, "w", encoding="utf-8") as file:
+            file.write(updated)
+
+
+def set_config_assignment(path, name, value):
+    if not os.path.isfile(path):
+        return
+    with open(path, encoding="utf-8") as file:
+        lines = file.readlines()
+    updated = [f'{name}="{value}"\n' if line.startswith(f"{name}=") else line for line in lines]
+    if updated != lines:
+        with open(path, "w", encoding="utf-8") as file:
+            file.writelines(updated)
+
 
 def run_cmd(command, desc=None, sudo=False, allow_fail=False):
     if sudo:
@@ -46,12 +77,18 @@ def run_cmd(command, desc=None, sudo=False, allow_fail=False):
     return process.returncode == 0
 
 def install_base():
-    run_cmd("apt-get update -y && apt-get upgrade -y", "Updating APT packages", sudo=True)
-    pkgs = "vim python3 python3-pip python3-venv gpg make man-db gcc unzip wget curl git ripgrep fd-find fontconfig"
-    run_cmd(f"apt-get install -y {pkgs}", "Installing base utilities", sudo=True)
+    if IS_MACOS:
+        run_cmd("brew update", "Updating Homebrew")
+        pkgs = "vim python git ripgrep fd fontconfig gnupg make unzip wget"
+        install_packages(pkgs, "Installing base utilities")
+    else:
+        run_cmd("apt-get update -y && apt-get upgrade -y", "Updating APT packages", sudo=True)
+        pkgs = "vim python3 python3-pip python3-venv gpg make man-db gcc unzip wget curl git ripgrep fd-find fontconfig"
+        install_packages(pkgs, "Installing base utilities")
 
 def install_zsh():
-    run_cmd("apt-get install -y zsh", "Installing Zsh", sudo=True)
+    if not run_cmd("command -v zsh", allow_fail=True):
+        install_packages("zsh", "Installing Zsh")
 
     omz_dir = os.path.join(HOME, ".oh-my-zsh")
     zshrc = os.path.join(HOME, ".zshrc")
@@ -75,11 +112,17 @@ def install_zsh():
         run_cmd(f"git clone --depth=1 https://github.com/romkatv/powerlevel10k.git {p10k_dir}", "Installing Powerlevel10k")
         zshrc = os.path.join(HOME, ".zshrc")
         if os.path.isfile(zshrc):
-            run_cmd(f"sed -i 's/ZSH_THEME=\".*\"/ZSH_THEME=\"powerlevel10k\\/powerlevel10k\"/g' {zshrc}", "Configuring P10k theme")
+            set_config_assignment(zshrc, "ZSH_THEME", "powerlevel10k/powerlevel10k")
     else:
         console.print("[green]✓[/green] Powerlevel10k already installed.")
 
 def install_build_essentials():
+    if IS_MACOS:
+        if not run_cmd("xcode-select -p", allow_fail=True):
+            console.print("[bold red]Install Xcode Command Line Tools with `xcode-select --install`, then rerun setup.[/bold red]")
+            sys.exit(1)
+        install_packages("pkg-config openssl readline xz", "Installing build essentials")
+        return
     pkgs = ("build-essential libssl-dev libffi-dev libncurses5-dev zlib1g-dev "
             "libbz2-dev libreadline-dev libsqlite3-dev llvm libncursesw5-dev "
             "xz-utils tk-dev libxml2-dev libxmlsec1-dev liblzma-dev")
@@ -96,6 +139,9 @@ def install_gh():
     if run_cmd("command -v gh", allow_fail=True):
         console.print("[green]✓[/green] GitHub CLI already installed.")
         return
+    if IS_MACOS:
+        install_packages("gh", "Installing GitHub CLI")
+        return
     cmds = """
     mkdir -p -m 755 /etc/apt/keyrings && \
     wget -nv -O /tmp/gh.gpg https://cli.github.com/packages/githubcli-archive-keyring.gpg && \
@@ -111,6 +157,8 @@ def install_gh():
 def install_neovim():
     if run_cmd("command -v nvim", allow_fail=True):
         console.print("[green]✓[/green] Neovim already installed.")
+    elif IS_MACOS:
+        install_packages("neovim", "Installing Neovim")
     else:
         # Neovim only ships prebuilt tarballs for x86_64 and arm64 (Pi 3/4/
         # Zero 2 W and other 64-bit ARM boards) — grabbing the wrong one
@@ -138,10 +186,8 @@ def install_neovim():
 
 def install_nvm():
     nvm_dir = os.path.join(HOME, ".nvm")
-    if os.path.exists(nvm_dir):
-        run_cmd(f"rm -rf {nvm_dir}", sudo=True)
-    run_cmd(f"mkdir -p {nvm_dir} && chown -R {USER} {nvm_dir}", sudo=True)
-    run_cmd("curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash", "Installing NVM")
+    if not os.path.exists(nvm_dir):
+        run_cmd("curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash", "Installing NVM")
     # Install Node 25
     cmds = f"[ -s \"{nvm_dir}/nvm.sh\" ] && \\. \"{nvm_dir}/nvm.sh\" && nvm install 25"
     run_cmd(cmds, "Installing Node.js via NVM")
@@ -193,31 +239,33 @@ def install_gemini():
         run_cmd(cmds, "Installing Gemini CLI")
 
 def install_fonts():
-    font_dir = os.path.join(HOME, ".local/share/fonts")
+    font_dir = os.path.join(HOME, "Library/Fonts" if IS_MACOS else ".local/share/fonts")
     if os.path.isfile(os.path.join(font_dir, "RobotoMonoNerdFont-Regular.ttf")):
         console.print("[green]✓[/green] Nerd Fonts already installed.")
     else:
         cmds = f"""
         mkdir -p {font_dir} && \
-        wget -nv -O /tmp/RobotoMono.zip https://github.com/ryanoasis/nerd-fonts/releases/latest/download/RobotoMono.zip && \
+        curl -fsSL -o /tmp/RobotoMono.zip https://github.com/ryanoasis/nerd-fonts/releases/latest/download/RobotoMono.zip && \
         unzip -q -o /tmp/RobotoMono.zip -d {font_dir} && \
-        rm /tmp/RobotoMono.zip && \
-        fc-cache -fv
+        rm /tmp/RobotoMono.zip
         """
+        if not IS_MACOS:
+            cmds += " && fc-cache -fv"
         run_cmd(cmds, "Installing Roboto Nerd Font")
 
 def install_bat():
-    run_cmd("apt-get install -y bat", "Installing bat", sudo=True)
-    run_cmd("echo \"alias bat='batcat'\" >> ~/.zshrc", "Adding bat alias")
+    install_packages("bat", "Installing bat")
+    if not IS_MACOS:
+        run_cmd("echo \"alias bat='batcat'\" >> ~/.zshrc", "Adding bat alias")
 
 def install_fzf():
     run_cmd(f"git clone --depth 1 https://github.com/junegunn/fzf.git {HOME}/.fzf && {HOME}/.fzf/install --all", "Installing fzf")
 
 def install_monitors():
-    run_cmd("apt-get install -y htop btop", "Installing htop & btop", sudo=True)
+    install_packages("htop btop", "Installing htop & btop")
 
 def install_fastfetch():
-    run_cmd("apt-get install -y fastfetch", "Installing fastfetch", sudo=True)
+    install_packages("fastfetch", "Installing fastfetch")
 
 def install_docker():
     run_cmd("apt-get install -y docker.io docker-compose", "Installing Docker & Compose", sudo=True)
@@ -235,7 +283,7 @@ def install_zsh_plugins():
     
     zshrc = os.path.join(HOME, ".zshrc")
     if os.path.isfile(zshrc):
-        run_cmd(f"sed -i 's/plugins=(git)/plugins=(git zsh-autosuggestions zsh-syntax-highlighting)/g' {zshrc}", "Configuring Zsh plugins")
+        replace_in_file(zshrc, "plugins=(git)", "plugins=(git zsh-autosuggestions zsh-syntax-highlighting)")
 
 def install_nvidia_cuda():
     if platform.machine() != "x86_64":
@@ -282,8 +330,12 @@ def install_gnome_tools():
     run_cmd("apt-get install -y gnome-tweaks gnome-shell-extension-manager", "Installing GNOME Customization Tools", sudo=True)
 
 def install_extra_utilities():
-    run_cmd("apt-get install -y ncdu vlc ufw", "Installing ncdu, vlc & ufw", sudo=True)
-    run_cmd("ufw --force enable", "Enabling UFW Firewall", sudo=True)
+    if IS_MACOS:
+        install_packages("ncdu", "Installing ncdu")
+        run_cmd("brew install --cask vlc", "Installing VLC")
+    else:
+        install_packages("ncdu vlc ufw", "Installing ncdu, vlc & ufw")
+        run_cmd("ufw --force enable", "Enabling UFW Firewall", sudo=True)
 
 def main():
     console.print(Panel.fit("[bold blue]Shell Setup[/bold blue]", subtitle="Modern Hybrid Installer"))
@@ -313,6 +365,17 @@ def main():
         questionary.Choice("Advanced CLI: htop & btop (Monitors)", checked=False),
         questionary.Choice("Advanced CLI: fastfetch (System Info)", checked=False),
     ]
+    if IS_MACOS:
+        linux_only = {
+            "Flatpak Setup & System Codecs",
+            "Tailscale",
+            "Tailscale Exit Node Configuration",
+            "Docker Engine & Compose",
+            "NVIDIA Drivers & CUDA Toolkit",
+            "Steam & Gaming Setup",
+            "GNOME Customization Tools",
+        }
+        choices = [choice for choice in choices if choice.title not in linux_only]
 
     if os.environ.get("SETUP_NONINTERACTIVE"):
         selected = [c.title for c in choices if c.checked]

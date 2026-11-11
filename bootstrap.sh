@@ -22,30 +22,38 @@ fi
 
 echo "--- Bootstrapping shell-setup ---"
 
-# The bootstrap and setup.py use Ubuntu/APT packages and Linux-specific
-# commands. Copilot CLI itself supports macOS, but this bootstrap does not.
-if [ "$(uname -s)" != "Linux" ] || ! command -v apt-get >/dev/null 2>&1; then
-    echo "ERROR: This bootstrap requires an Ubuntu/APT-based Linux host."
-    echo "GitHub Copilot CLI supports macOS, but the rest of this setup does not."
-    exit 1
-fi
-
-# Require sudo privileges upfront
-if [ "$EUID" -ne 0 ]; then
-    if ! command -v sudo >/dev/null 2>&1; then
-        echo "ERROR: You are not root and sudo is not installed. Please run as root."
+case "$(uname -s)" in
+    Darwin)
+        if ! command -v brew >/dev/null 2>&1; then
+            echo "ERROR: Homebrew is required for macOS. Install it from https://brew.sh, then rerun this script."
+            exit 1
+        fi
+        brew update
+        brew install git
+        ;;
+    Linux)
+        if ! command -v apt-get >/dev/null 2>&1; then
+            echo "ERROR: Linux setup requires an Ubuntu/Debian host with apt-get."
+            exit 1
+        fi
+        if [ "$EUID" -ne 0 ]; then
+            if ! command -v sudo >/dev/null 2>&1; then
+                echo "ERROR: You are not root and sudo is not installed. Please run as root."
+                exit 1
+            fi
+            if [ -z "$BOOTSTRAP_AUTO" ]; then
+                sudo -v
+            fi
+        fi
+        echo "Installing base dependencies..."
+        sudo apt-get update -y
+        sudo apt-get install -y curl python3 python3-pip python3-venv git zsh
+        ;;
+    *)
+        echo "ERROR: Supported systems are macOS and Ubuntu/Debian Linux (including WSL)."
         exit 1
-    fi
-    if [ -z "$BOOTSTRAP_AUTO" ]; then
-        # Prompt for password now to cache credentials
-        sudo -v
-    fi
-fi
-
-# Install dependencies needed for python/uv
-echo "Installing base dependencies..."
-sudo apt-get update -y
-sudo apt-get install -y curl python3 python3-pip python3-venv git zsh
+        ;;
+esac
 
 # Install uv if not present
 if ! command -v uv >/dev/null 2>&1; then
@@ -54,13 +62,25 @@ if ! command -v uv >/dev/null 2>&1; then
     export PATH="$HOME/.local/bin:$PATH"
 fi
 
-# Make sure zsh is the default shell (honors $USER override, e.g. when run
-# as root on behalf of another account via BOOTSTRAP_AUTO)
+# Make sure zsh is available and the default shell.
 USER_NAME="${USER:-$(whoami)}"
-ZSH_PATH="$(which zsh)"
+ZSH_PATH="$(command -v zsh || true)"
+if [ -z "$ZSH_PATH" ]; then
+    if [ "$(uname -s)" = "Darwin" ]; then
+        brew install zsh
+        ZSH_PATH="$(command -v zsh)"
+    else
+        echo "ERROR: zsh installation failed."
+        exit 1
+    fi
+fi
 if [ "$SHELL" != "$ZSH_PATH" ]; then
     echo "Setting zsh as default shell..."
-    sudo chsh -s "$ZSH_PATH" "$USER_NAME"
+    if [ "$(uname -s)" = "Darwin" ]; then
+        chsh -s "$ZSH_PATH" "$USER_NAME"
+    else
+        sudo chsh -s "$ZSH_PATH" "$USER_NAME"
+    fi
 fi
 
 # Ensure setup.py exists, downloading it if this is a standalone bootstrap.sh
