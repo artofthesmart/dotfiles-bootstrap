@@ -1,6 +1,25 @@
 # termux-setup
 A shell script for setting up Termux the way I like.
 
+## Dotfiles setup
+
+Run the interactive bootstrap on macOS (requires [Homebrew](https://brew.sh))
+or Ubuntu/Debian Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/artofthesmart/dotfiles-bootstrap/main/bootstrap.sh -o bootstrap.sh && bash ./bootstrap.sh
+```
+
+On Windows, install an Ubuntu distribution in WSL, then run this in PowerShell:
+
+```powershell
+wsl.exe -e bash -lc 'curl -fsSL https://raw.githubusercontent.com/artofthesmart/dotfiles-bootstrap/main/bootstrap.sh -o bootstrap.sh && bash ./bootstrap.sh'
+```
+
+macOS uses Homebrew for the shared tools. Linux-specific options (such as
+Flatpak, Docker Engine, NVIDIA/CUDA, Steam, and GNOME tools) are only offered
+on Ubuntu/Debian. The Windows command runs the Linux setup inside WSL.
+
 ## Local AI in VS Code
 
 These independent setup wizards install/reuse VS Code and Ollama, prepare a
