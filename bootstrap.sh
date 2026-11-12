@@ -29,7 +29,7 @@ case "$(uname -s)" in
             exit 1
         fi
         brew update
-        brew install git
+        brew install git python
         ;;
     Linux)
         if ! command -v apt-get >/dev/null 2>&1; then
@@ -93,7 +93,20 @@ if [ ! -f "setup.py" ]; then
     fi
 fi
 
-# Re-execute in zsh and run the Python component selector. Optional tools,
-# including GitHub Copilot CLI, are installed by setup.py when selected.
+# Provision dependencies separately so a setup failure never retries the installer.
+SETUP_VENV="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles-bootstrap/venv"
+echo "Preparing isolated setup environment..."
+python3 -m venv "$SETUP_VENV"
+SETUP_PYTHON="$SETUP_VENV/bin/python"
+if ! uv pip install --python "$SETUP_PYTHON" rich questionary; then
+    echo "WARNING: uv could not install setup dependencies. Retrying with Python pip in the same virtual environment."
+    if ! "$SETUP_PYTHON" -m pip install rich questionary; then
+        echo "ERROR: Both uv and pip failed to install setup dependencies; the setup wizard has not run."
+        echo "Check access to https://pypi.org and https://files.pythonhosted.org, plus any VPN, proxy, or certificate configuration."
+        echo "Rerun bootstrap.sh after fixing connectivity. No global Python packages were installed."
+        exit 1
+    fi
+fi
+
 echo "Launching modern hybrid setup..."
-exec zsh -c "export PATH=\"\$HOME/.local/bin:\$PATH\"; uv run --with rich --with questionary setup.py"
+exec "$SETUP_PYTHON" setup.py
