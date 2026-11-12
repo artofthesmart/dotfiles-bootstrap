@@ -20,6 +20,8 @@ macOS uses Homebrew for the shared tools. Linux-specific options (such as
 Flatpak, Docker Engine, NVIDIA/CUDA, Steam, and GNOME tools) are only offered
 on Ubuntu/Debian. The Windows command runs the Linux setup inside WSL.
 
+The bootstrap installs its Python dependencies in a dedicated virtual environment at `${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles-bootstrap/venv`, not into your global Python installation. If uv cannot download dependencies, it reports the failure and retries using Python pip in that environment. If both fail, the wizard stops before installing components; check access to `pypi.org` and `files.pythonhosted.org`, including any VPN, proxy, or certificate settings, then rerun the bootstrap. TLS verification stays enabled.
+
 ## Local AI in VS Code
 
 These independent setup wizards install/reuse VS Code and Ollama, prepare a
